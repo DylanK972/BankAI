@@ -278,7 +278,7 @@ function render() {
     li.appendChild(left); li.appendChild(right); ul.appendChild(li);
   }
 
-  // Cartes budgets (on garde) – pas de badge revenu
+  // Cartes budgets – pas de badge revenu
   const wrap = $("#budgets"); if (wrap) {
     wrap.innerHTML = "";
     const byCat = byCategoryFor(d);
@@ -330,6 +330,7 @@ function pushPersona(role, text) {
   }
 
   const body = document.createElement("div");
+  body.style.whiteSpace = "pre-wrap"; // afficher les \n\n
   body.textContent = text;
   wrap.appendChild(body);
 
@@ -361,7 +362,9 @@ function typeLikeAI(text) {
     const name = document.createElement("div"); name.textContent = state.aiPersona.name || "Assistant·e"; name.style.fontSize = "12px"; name.style.opacity = ".8";
     head.appendChild(avatar); head.appendChild(name); wrap.appendChild(head);
 
-    const body = document.createElement("div"); wrap.appendChild(body);
+    const body = document.createElement("div");
+    body.style.whiteSpace = "pre-wrap"; // afficher les \n\n
+    wrap.appendChild(body);
     box.appendChild(wrap); box.scrollTop = box.scrollHeight;
 
     const speed = Math.max(5, Number(state.aiPersona.typingSpeedMs || 18));
@@ -420,7 +423,7 @@ function personaHelloAndTOS(force = false) {
 }
 
 // -----------------------------
-// BUDGET BRAIN — intents & réponses
+// Helpers “humains” + intents
 // -----------------------------
 function numberFromText(str) {
   // attrape "1000", "1 000", "1.000", "1000€", etc.
@@ -430,48 +433,65 @@ function numberFromText(str) {
   return isNaN(n) ? null : n;
 }
 
+// Assemble joliment des blocs de texte avec des lignes vides entre
+function human(paragraphs) {
+  return paragraphs.filter(Boolean).join("\n\n");
+}
+
 function brainAnswer(q) {
   const d = new Date();
   const lower = q.toLowerCase();
 
-  // Raccourcis
-  if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)|changer.*revenu/.test(lower))
-    return "Clique sur le bouton 💶 Revenu pour saisir/mettre à jour le revenu de chaque mois. Je m’y base pour tous mes calculs.";
-
-  // Chiffres clés
+  // Chiffres clés & helpers
   const income = incomeFinalFor(d) || 0;
   const incomeObs = incomeObservedFor(d) || 0;
-  const spent = spendFor(d) || 0;
+  const spend = spendFor(d) || 0;
   const { top } = topCategoryFor(d);
   const by = byCategoryFor(d);
   const { avgDaily, forecast, daysPassed, daysInMonth } = forecastEndOfMonth();
+  const monthKey = mkey(d);
 
-  // Helpers
+  const daysLeft = Math.max(1, daysInMonth - daysPassed);
+  const usableIncome = income || incomeObs;
+
   const safeToSpend = () => {
+    // “part fixe” approx: loyer + abonnements + 40% transport
     const fixed = (by["Loyer"] || 0) + (by["Abonnements"] || 0) + (by["Transport"] || 0) * 0.4;
-    const already = spent;
-    const inc = income || incomeObs;
-    const left = Math.max(0, inc - fixed - already);
-    const perDay = left / Math.max(1, daysInMonth - daysPassed);
+    const already = spend;
+    const left = Math.max(0, usableIncome - fixed - already);
+    const perDay = left / daysLeft;
     return { left, perDay };
   };
+
   const base50 = () => {
     const base = budget50_30_20(d);
     if (!base) return null;
     const loyer = by["Loyer"] || 0;
     const needs = Math.max(loyer, base.needs * 0.5) + Math.max(0, by["Courses"] || 0);
     const wants = Math.max(base.wants * 0.5, by["Sorties"] || 0);
-    const save = Math.max(base.save, Math.max(0, (income - spent) * 0.4));
+    const save = Math.max(base.save, Math.max(0, (usableIncome - spend) * 0.4));
     return { base, loyer, needs, wants, save };
   };
 
-  // 🔥 INTENT: “économiser X €”
-  if (/(économis|epargne|épargn|mettre de c[oô]t[ée])/.test(lower) && numberFromText(lower) != null) {
-    const target = numberFromText(lower);
-    const inc = income || incomeObs;
-    if (!inc) return "Dis-moi ton revenu via 💶 Revenu, puis je te calcule un plan précis pour atteindre l’objectif.";
+  // 0) “où saisir le revenu ?”
+  if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)|changer.*revenu/.test(lower)) {
+    return human([
+      "Pour que mes calculs soient nickel, ajoute ton revenu par mois.",
+      "➡️ Clique sur **💶 Revenu** sous le chat, choisis le mois, saisis le montant, enregistre.",
+    ]);
+  }
 
-    // Catégories ajustables (ordre de coupe)
+  // 1) “économiser X €”
+  const amountInText = numberFromText(lower);
+  if (/(économis|epargne|épargn|mettre de c[oô]t[ée])/.test(lower) && amountInText != null) {
+    const target = amountInText;
+    if (!usableIncome) {
+      return human([
+        "Si tu veux économiser un montant précis, j’ai besoin de ton revenu du mois.",
+        "➡️ Ajoute-le via **💶 Revenu**, puis je te sors un plan chiffré tout de suite.",
+      ]);
+    }
+
     const flexOrder = [
       ["Sorties", 0.35],
       ["Courses", 0.25],
@@ -479,9 +499,9 @@ function brainAnswer(q) {
       ["Transport", 0.15],
       ["Autres", 0.25],
     ];
+
     let remaining = target;
     const cuts = [];
-
     for (const [cat, maxPct] of flexOrder) {
       const cur = by[cat] || 0;
       if (cur <= 0) continue;
@@ -493,72 +513,156 @@ function brainAnswer(q) {
       }
     }
 
-    // Si objectif > capacité raisonnable ce mois-ci
-    const room = Math.max(0, inc - spent);
+    const room = Math.max(0, usableIncome - spend);
     if (remaining > 0 && remaining > room * 0.5) {
       const perMonth = Math.max(50, Math.round(target / 2));
-      return `Objectif ambitieux : ${fmt(target)}. Plan réaliste : coupe ${cuts
-        .map(([c, v]) => `${fmt(v)} sur ${c}`)
-        .join(", ")} et étale le reste sur 2 mois (~${fmt(perMonth)}/mois). Bonus : vends 1–2 objets inutilisés pour combler la différence.`;
+      return human([
+        `Si tu veux économiser **${fmt(target)}** ce mois-ci, honnêtement c’est costaud.`,
+        `Plan réaliste 👇`,
+        `• ${cuts.map(([c, v]) => `Réduire **${c}** de **${fmt(v)}**`).join("\n• ") || "Regarder les postes flexibles (Sorties, Courses, Abonnements)"}\n• Étaler le reste sur **2 mois** (~${fmt(perMonth)}/mois)`,
+        "Bonus rapide : revends 1–2 objets (tech, fringues) pour combler l’écart.",
+      ]);
     }
 
-    const daysLeft = Math.max(1, daysInMonth - daysPassed);
     const perDay = target / daysLeft;
-    return `Plan pour économiser **${fmt(target)}** ce mois-ci :
-- ${cuts.map(([c, v]) => `Réduire ${c} de ${fmt(v)}`).join("\n- ")}
-- Micro-épargne : ~${fmt(perDay)}/jour d’ici la fin du mois.
-Astuce : passe tes paiements plaisir en cash & désactive 1–2 abonnements peu utilisés.`;
+    return human([
+      `Si tu veux économiser **${fmt(target)}** ce mois-ci, c’est jouable mais il faut être carré :`,
+      `• ${cuts.map(([c, v]) => `Coupe **${c}** : ${fmt(v)}`).join("\n• ") || "Commence par les postes non essentiels (Sorties, Abonnements)"}\n• **Micro-épargne** : ~${fmt(perDay)}/jour jusqu’à la fin du mois`,
+      "Astuce : passe les dépenses plaisir en **cash** et désactive 1–2 abonnements peu utilisés.",
+    ]);
   }
 
-  // Budget “général”
-  if (/(budget|plafond|enveloppe)/.test(lower)) {
-    const b = base50();
-    if (!b) return "J'ai besoin d'un revenu (observé ou saisi) pour proposer un budget précis. Clique sur 💶 Revenu pour l’indiquer.";
-    return `Proposition budget (50/30/20 adapté) sur revenu ${fmt(b.base.income)} :
-- Besoins (loyer, factures, courses) ≈ ${fmt(b.needs)}
-- Plaisir ≈ ${fmt(b.wants)}
-- Épargne/objectif ≈ ${fmt(b.save)}
-Ajuste: Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"] || 0)} • Courses ${fmt(by["Courses"] || 0)}.`;
-  }
-
-  // Où je dépense le plus ?
-  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)) {
-    return `Top catégorie ce mois-ci : **${top}** (${fmt(by[top] || 0)}). Réduis-la de 10–15% et bascule automatiquement l’économie en épargne.`;
-  }
-
-  // Safe-to-spend
-  if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)) {
-    const s = safeToSpend();
-    return `Reste à dépenser ≈ ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour). Verrouille les achats plaisir à ${fmt(Math.max(5, s.perDay * 0.6))}/jour pour garder de la marge.`;
-  }
-
-  // Prévision fin de mois
-  if (/(prévision|fin de mois|projection)/.test(lower)) {
-    return `Prévision fin de mois : dépenses ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours). Objectif de reste conseillé : ≥ ${fmt(Math.max(0, (income || incomeObs) - forecast))}.`;
-  }
-
-  // Epargne sans montant
+  // 2) “épargne sans montant”
   if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)) {
     const base = budget50_30_20(d);
-    if (!base) return "Dis-moi ton revenu du mois via 💶 Revenu et je calcule une épargne ciblée (50/30/20 adapté).";
+    if (!base) {
+      return human([
+        "Pour te donner une cible d’épargne précise, dis-moi ton revenu du mois.",
+        "➡️ Ajoute-le via **💶 Revenu**, et je te propose un plan 50/30/20 adapté.",
+      ]);
+    }
     const target = Math.max(50, Math.round(base.save));
-    const daysLeft = Math.max(1, daysInMonth - daysPassed);
     const perDay = target / daysLeft;
-    return `Capacité d’épargne conseillée : ${fmt(target)} ce mois-ci (~${fmt(perDay)}/jour). Mets une épargne auto le lendemain du salaire.`;
+    return human([
+      `Capacité d’épargne conseillée ce mois-ci : **${fmt(target)}** (règle 50/30/20 adaptée).`,
+      `Mode d’emploi : déclenche un virement **automatique** le lendemain du salaire et vise ~**${fmt(perDay)}/jour**.`,
+    ]);
   }
 
-  // Abonnements
+  // 3) Fonds d’urgence
+  if (/(fonds|e?pargne).*(urgence|précaution)/.test(lower)) {
+    const base = budget50_30_20(d);
+    const target = base ? Math.max(1000, Math.round((base.income || usableIncome) * 3)) : 1000;
+    const start = Math.max(50, Math.round((usableIncome || 0) * 0.1));
+    return human([
+      "Fonds d’urgence = ton airbag financier. Objectif classique : **3 mois de dépenses** (ou au moins **1000 €** pour démarrer).",
+      `Pour toi, une bonne cible serait autour de **${fmt(target)}**.`,
+      `Plan simple : épargne **${fmt(start)}**/mois automatiquement, et augmente de +10% dès que possible.`,
+    ]);
+  }
+
+  // 4) Budget général
+  if (/(budget|plafond|enveloppe)/.test(lower)) {
+    const b = base50();
+    if (!b) {
+      return human([
+        "Je peux te proposer un budget sur mesure, mais il me faut ton revenu du mois.",
+        "➡️ Clique sur **💶 Revenu**, et je te sors une répartition claire.",
+      ]);
+    }
+    return human([
+      `Budget conseillé (adapté 50/30/20) sur revenu **${fmt(b.base.income)}** :`,
+      `• **Besoins** (logement, factures, courses) ≈ ${fmt(b.needs)}\n• **Plaisir** ≈ ${fmt(b.wants)}\n• **Épargne/objectif** ≈ ${fmt(b.save)}`,
+      `Garde un œil sur : Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"] || 0)} • Courses ${fmt(by["Courses"] || 0)}.`,
+    ]);
+  }
+
+  // 5) “où je dépense le plus ?”
+  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)) {
+    return human([
+      `En ce moment, la catégorie qui pèse le plus c’est **${top}** (${fmt(by[top] || 0)}).`,
+      "Idée concrète : baisse **10–15%** sur ce poste et envoie la différence en épargne auto.",
+    ]);
+  }
+
+  // 6) Safe-to-spend
+  if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)) {
+    const s = safeToSpend();
+    return human([
+      `Ce qu’il te reste à dépenser sereinement : **${fmt(s.left)}** (~${fmt(s.perDay)}/jour).`,
+      `Garde une marge : limite les achats plaisir à ~${fmt(Math.max(5, s.perDay * 0.6))}/jour jusqu’à fin de mois.`,
+    ]);
+  }
+
+  // 7) Prévision fin de mois
+  if (/(prévision|fin de mois|projection)/.test(lower)) {
+    return human([
+      `Projection : dépenses ≈ **${fmt(forecast)}** (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`,
+      `Pour finir propre : vise au moins **${fmt(Math.max(0, usableIncome - forecast))}** de reste.`,
+    ]);
+  }
+
+  // 8) Courses
+  if (/(courses|supermarch|aliment|bouffe|nourriture)/.test(lower)) {
+    const budget = Math.max(80, Math.round((usableIncome || 1200) * 0.12));
+    return human([
+      `Objectif courses réaliste : **${fmt(budget)}** ce mois-ci.`,
+      "Astuces qui marchent :",
+      "• Va au magasin **après** avoir mangé (oui, ça change tout) \n• Fais une **liste** + menu de 5 repas réutilisables \n• Privilégie **MDD** / vrac / congelé \n• Batch-cook le dimanche (moins de gâchis)",
+      "• Fixe un panier cap (ex: 30 €) et repose 1 article si tu dépasses.",
+    ]);
+  }
+
+  // 9) Abonnements
   if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)) {
     const subs = subscriptionsHeuristics();
-    if (!subs.length) return "Je n’ai pas détecté d’abonnements récurrents évidents. Utilise des libellés clairs (ex: “Abonnement X”).";
+    if (!subs.length) {
+      return human([
+        "Je ne vois pas d’abonnements évidents dans tes libellés.",
+        "Renomme tes transactions récurrentes en **“Abonnement X”** et je te ferai un audit.",
+      ]);
+    }
     const lines = subs
       .slice(0, 6)
       .map((s) => `• ${s.label} ~ ${fmt(s.avg)}/mois (dernier: ${s.lastDate.toLocaleDateString("fr-FR")})`)
       .join("\n");
-    return `Abonnements possibles repérés :\n${lines}\nAudit: supprime le superflu, regroupe les paiements, alerte 48h avant renouvellement.`;
+    return human([
+      "Ce que je repère comme abonnements possibles :",
+      lines,
+      "Conseil : garde 3 services max, mets un rappel 48 h avant renouvellement, et passe au plan annuel seulement si tu es sûr de l’usage.",
+    ]);
   }
 
-  // Anomalies
+  // 10) Revenus irréguliers / freelance / primes
+  if (/(irr[ée]guli|freelance|ind[ée]pendant|prime|bonus|variable)/.test(lower)) {
+    return human([
+      "Revenus irréguliers ? Voici une base qui sécurise :",
+      "• Crée un **compte tampon** (1 mois de dépenses) \n• Verse-toi un **“salaire” fixe** depuis ce compte chaque mois \n• Toute entrée > moyenne → 50% épargne (fonds d’urgence / objectifs), 50% plaisir/dettes",
+      "• Mets les charges (loyer, assurance) juste après tes plus grosses rentrées pour éviter les trous d’air.",
+    ]);
+  }
+
+  // 11) Étudiant / alternant
+  if (/(étudiant|alternant|bourse|campus|logement étudiant)/.test(lower)) {
+    return human([
+      "Budget étudiant simple :",
+      "• Loyer ≤ 35% des revenus \n• Courses 100–160 €/mois (beaucoup MDD / cantine U si possible) \n• Transport : privilégie vélo/étudiant \n• Abonnements : 2 max",
+      "Astuce : garde 200–300 € de **mini-tampon** et automatise 20–50 € d’épargne par mois. La régularité compte plus que le montant.",
+    ]);
+  }
+
+  // 12) Vacances / gros achat
+  if (/(vacances|voyage|pc|ordi|voiture|iphone|canap|meuble|d[ée]m[ée]nagement)/.test(lower)) {
+    const goal = amountInText || Math.max(300, Math.round((usableIncome || 1000) * 0.6));
+    const monthly = Math.max(30, Math.round(goal / 4));
+    return human([
+      `Plan “gros achat / vacances” : objectif **${fmt(goal)}**.`,
+      `• Ouvre une **cagnotte séparée** et mets **${fmt(monthly)}**/mois (virement auto) \n• Ajoute tout **bonus/revente** dessus \n• Réserve tôt et vise -15 à -25% avec dates flexibles`,
+      "Plus c’est visible, plus tu tiens ton plan. Renomme le compte au nom de l’objectif 😉",
+    ]);
+  }
+
+  // 13) Anomalies
   if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)) {
     const byNow = byCategoryFor(d);
     const avgByCat = {};
@@ -567,36 +671,54 @@ Ajuste: Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"] || 0)} •
       avgByCat[k] = v / Math.max(1, n);
     }
     const anomalies = monthTx(d).filter((t) => t.amount < 0 && Math.abs(t.amount) > (avgByCat[t.cat] || 0) * 2);
-    if (!anomalies.length) return "Rien d’inhabituel détecté ce mois-ci. Surveille les paiements internationaux et les doublons le même jour.";
+    if (!anomalies.length) {
+      return human([
+        "Rien d’inhabituel détecté ce mois-ci.",
+        "Garde un œil sur les paiements internationaux, les montants ronds répétés, et les doublons le même jour.",
+      ]);
+    }
     const lines = anomalies
       .slice(0, 5)
       .map((t) => `• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString("fr-FR")}`)
       .join("\n");
-    return `Alertes potentielles (×2 au-dessus de l’habitude) :\n${lines}\nVérifie et conteste si non autorisé.`;
+    return human([
+      "Alertes potentielles (≈ 2× au-dessus de l’habitude) :",
+      lines,
+      "Vérifie et conteste sans attendre si non autorisé.",
+    ]);
   }
 
-  // Dettes
+  // 14) Dettes
   if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)) {
-    const room = Math.max(0, (income || incomeObs) - spent);
-    return `Stratégie dettes : consacre ${fmt(Math.max(20, room * 0.6))}/mois au remboursement accéléré. Méthode **avalanche** (taux le + élevé d’abord) pour économiser des intérêts.`;
+    const room = Math.max(0, usableIncome - spend);
+    return human([
+      "Pour rembourser vite et au moindre coût :",
+      `• Consacre **${fmt(Math.max(20, room * 0.6))}/mois** au remboursement \n• Méthode **avalanche** : on priorise le **taux le plus élevé** (intérêts minimisés) \n• En second choix, **boule de neige** : du plus petit au plus gros (motivation)`,
+      "Chaque fois que tu libères une mensualité, **réaffecte** le montant à la suivante.",
+    ]);
   }
 
-  // Revenu pris en compte ?
+  // 15) “Revenu pris en compte ?”
   if (/(revenu|salaire|pay[eé]|gains).*(combien|pris|consid[ée]r|pris en compte)/.test(lower)) {
     const planned = incomePlannedFor(d);
     return planned != null
-      ? `Pour ${mkey(d)} j’utilise ton revenu saisi : ${fmt(planned)}. Tu peux l’ajuster via 💶 Revenu.`
-      : `Je n’ai pas de revenu saisi pour ${mkey(d)}. J’estime ${fmt(incomeObs)} depuis les entrées du mois. Tu peux le définir via 💶 Revenu.`;
+      ? human([`Pour **${monthKey}**, j’utilise ton **revenu saisi** : ${fmt(planned)}.`, "Tu peux l’ajuster via **💶 Revenu**."])
+      : human([`Je n’ai pas de revenu saisi pour **${monthKey}**.`, `J’estime **${fmt(incomeObs)}** à partir des entrées du mois. Tu peux le définir via **💶 Revenu**.`]);
   }
 
-  // Fallback
-  const incUse = income || incomeObs;
-  const spendPct = incUse > 0 ? Math.round((spent / incUse) * 100) : 0;
+  // ----- Fallback : mini-bilan humain -----
+  const spendPct = usableIncome > 0 ? Math.round((spend / usableIncome) * 100) : 0;
   const b = budget50_30_20(d);
   const budgetLine = b
-    ? `Repère budget (50/30/20) : besoins ${fmt(b.needs)}, plaisir ${fmt(b.wants)}, épargne ${fmt(b.save)}.`
-    : `Ajoute ton revenu via 💶 pour une recommandation 50/30/20.`;
-  return `Résumé ${mkey(d)} — Revenus: ${fmt(incUse)}, Dépenses: ${fmt(spent)} (${spendPct}% des revenus). Catégorie la plus gourmande : ${top}. ${budgetLine}`;
+    ? `Repère 50/30/20 : besoins ${fmt(b.needs)} • plaisir ${fmt(b.wants)} • épargne ${fmt(b.save)}.`
+    : `Ajoute ton revenu via **💶 Revenu** pour une recommandation 50/30/20.`;
+
+  return human([
+    `Bilan **${monthKey}**`,
+    `• Revenus : ${fmt(usableIncome)}\n• Dépenses : ${fmt(spend)} (${spendPct}% des revenus)\n• Catégorie la plus gourmande : ${top}`,
+    budgetLine,
+    "Dis-moi ce que tu veux optimiser (courses, sorties, abonnements, dettes, vacances, fonds d’urgence…) et je te donne un plan concret.",
+  ]);
 }
 
 // -----------------------------
