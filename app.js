@@ -1,5 +1,6 @@
-console.log('BankAI app.js v5 (brainAnswer)');
-// BankIA (clean UI) — Demo only, no backend. PWA-ready + Persona IA configurable + Budget Brain
+console.log('BankAI app.js v6 (Budget Brain++)');
+// BankIA — Demo only, no backend. PWA-ready + Persona IA configurable + Budget Brain++
+
 const $ = (sel) => document.querySelector(sel);
 const fmt = (n) => (n<0? "-" : "") + "€" + Math.abs(n).toFixed(2);
 const TODAY = new Date();
@@ -16,9 +17,9 @@ const state = {
   budgets: { "Courses":300, "Sorties":150, "Transport":80, "Loyer":600, "Abonnements":50, "Autres":120 },
   aiMode: "demo",
   apiKey: "",
-  // Revenus planifiés/observés par mois: { "2025-01": 1700, ... }
+  // Revenu par mois: { "2025-01": 1700, ... }
   incomeByMonth: {},
-  // Persona IA totalement personnalisable
+  // Persona configurable
   aiPersona: {
     enabled: true,
     name: "Camille",
@@ -26,7 +27,7 @@ const state = {
     gender: "femme",
     tone: "chaleureuse, claire et proactive",
     emoji: "💙",
-    avatar: "", // URL optionnelle
+    avatar: "",
     bubbleHue: 225,
     greeting: "Bonjour ! Je suis {{name}}, {{role}}. Pose-moi ta première question et je te réponds avec des conseils concrets 😉",
     showTOS: true,
@@ -37,7 +38,7 @@ const state = {
   }
 };
 
-const KEY = "bankia_demo_state_v2"; // bump pour éviter cache ancien
+const KEY = "bankia_demo_state_v3";
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function load(){
   const raw = localStorage.getItem(KEY);
@@ -50,34 +51,33 @@ function load(){
 // -----------------------------
 function init(){
   load();
-  $("#monthTag").textContent = MONTH;
-  $("#email").value = state.user?.email || "";
-  $("#name").value = state.user?.name || "";
-  $("#aiMode").value = state.aiMode || "demo";
-  $("#apiKey").style.display = (state.aiMode === "api") ? "block" : "none";
-  $("#apiKey").value = state.apiKey || "";
+  $("#monthTag") && ($("#monthTag").textContent = MONTH);
+  $("#email") && ($("#email").value = state.user?.email || "");
+  $("#name") && ($("#name").value = state.user?.name || "");
+  $("#aiMode") && ($("#aiMode").value = state.aiMode || "demo");
+  $("#apiKey") && ($("#apiKey").style.display = (state.aiMode === "api") ? "block" : "none");
+  $("#apiKey") && ($("#apiKey").value = state.apiKey || "");
 
-  $("#loginBtn").onclick = login;
-  $("#logoutBtn").onclick = logout;
-  $("#aiMode").onchange = (e)=>{
+  $("#loginBtn") && ($("#loginBtn").onclick = login);
+  $("#logoutBtn") && ($("#logoutBtn").onclick = logout);
+  $("#aiMode") && ($("#aiMode").onchange = (e)=>{
     state.aiMode = e.target.value;
     $("#apiKey").style.display = (state.aiMode === "api") ? "block" : "none";
     save();
-  };
-  $("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); };
+  });
+  $("#apiKey") && ($("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); });
 
-  $("#addTx").onclick = addTx;
-  $("#resetData").onclick = resetData;
-  $("#exportBtn").onclick = exportJSON;
-  $("#importBtn").onclick = ()=> $("#importFile").click();
-  $("#importFile").onchange = importJSON;
+  $("#addTx") && ($("#addTx").onclick = addTx);
+  $("#resetData") && ($("#resetData").onclick = resetData);
+  $("#exportBtn") && ($("#exportBtn").onclick = exportJSON);
+  $("#importBtn") && ($("#importBtn").onclick = ()=> $("#importFile").click());
+  $("#importFile") && ($("#importFile").onchange = importJSON);
 
-  // UI injectée: Persona + Revenus par mois
   injectPersonaButtonAndPanel();
   injectIncomePanel(); // 💶
 
-  $("#sendChat").onclick = sendChat;
-  $("#chatInput").addEventListener("keydown", e=>{ if (e.key === "Enter") sendChat(); });
+  $("#sendChat") && ($("#sendChat").onclick = sendChat);
+  $("#chatInput") && ($("#chatInput").addEventListener("keydown", e=>{ if (e.key === "Enter") sendChat(); }));
 
   let deferredPrompt=null;
   window.addEventListener("beforeinstallprompt", (e)=>{
@@ -93,6 +93,9 @@ function init(){
   if (state.tx.length === 0) seedDemo();
   render();
 
+  // Titre dynamique (remplace "Coach IA" par le prénom)
+  updateChatTitle();
+
   personaHelloAndTOS();
 }
 
@@ -100,8 +103,8 @@ function init(){
 // LOGIN
 // -----------------------------
 function login(){
-  const email = $("#email").value.trim();
-  const name = $("#name").value.trim() || "Utilisateur";
+  const email = $("#email")?.value?.trim();
+  const name = $("#name")?.value?.trim() || "Utilisateur";
   if (!email) { alert("Email requis (démo)"); return; }
   state.user = { email, name };
   save();
@@ -113,9 +116,9 @@ function logout(){ state.user=null; save(); pushPersona("ai","Session fermée. R
 // TX / BUDGET
 // -----------------------------
 function addTx(){
-  const label = $("#txLabel").value.trim();
-  const amount = parseFloat($("#txAmount").value);
-  const cat = $("#txCat").value;
+  const label = $("#txLabel")?.value?.trim();
+  const amount = parseFloat($("#txAmount")?.value);
+  const cat = $("#txCat")?.value;
   if (!label || isNaN(amount)) { alert("Libellé et montant requis"); return; }
   state.tx.unshift({ id: crypto.randomUUID(), label, amount, cat, ts: Date.now() });
   $("#txLabel").value=""; $("#txAmount").value="";
@@ -155,9 +158,8 @@ function seedDemo(){
     {label:"Essence", amount:-35, cat:"Transport"},
   ];
   state.tx = sample.reverse().map(x=>({...x, id:crypto.randomUUID(), ts:Date.now()-Math.floor(Math.random()*20)*86400000})).reverse();
-  // Exemples de revenus saisis
   const nowKey = mkey(new Date());
-  state.incomeByMonth[nowKey] = 1700; // démo : tu peux éditer via le panneau 💶
+  state.incomeByMonth[nowKey] = 1700;
 }
 
 // -----------------------------
@@ -168,7 +170,6 @@ function getMonthRange(d=new Date()){
   const end = new Date(d.getFullYear(), d.getMonth()+1, 1);
   return {start, end};
 }
-function sumTx(filterFn){ return state.tx.filter(filterFn).reduce((a,b)=>a+b.amount,0); }
 function monthTx(d=new Date()){
   const {start,end}=getMonthRange(d);
   return state.tx.filter(t=> t.ts>=start.getTime() && t.ts<end.getTime());
@@ -200,9 +201,9 @@ function topCategoryFor(d=new Date()){
   for(const [k,v] of Object.entries(by)){ if(v>val){ val=v; top=k; } }
   return {top,val};
 }
+function balanceAll(){ return state.tx.reduce((a,b)=>a+b.amount,0); }
 
 function subscriptionsHeuristics(){
-  // Détection simple: même label qui revient >=2 fois avec montants proches (abonnements)
   const map = new Map();
   for (const t of state.tx){
     if (t.amount>=0) continue;
@@ -213,13 +214,11 @@ function subscriptionsHeuristics(){
   const subs=[];
   for (const [label, arr] of map.entries()){
     if (arr.length>=2){
-      // moyenne des montants (en absolu)
       const avg = Math.abs(arr.reduce((a,b)=>a+b.amount,0))/arr.length;
       const last = arr.sort((a,b)=>b.ts-a.ts)[0];
       subs.push({label, avg: Math.round(avg*100)/100, lastDate:new Date(last.ts)});
     }
   }
-  // tri par coût décroissant
   subs.sort((a,b)=> b.avg-a.avg);
   return subs.slice(0,8);
 }
@@ -242,15 +241,11 @@ function budget50_30_20(d=new Date()){
   const wants = income * 0.3;
   const save  = income * 0.2;
   return {
-    income,
+    income: Math.round(income*100)/100,
     needs: Math.round(needs*100)/100,
     wants: Math.round(wants*100)/100,
     save:  Math.round(save*100)/100
   };
-}
-
-function balanceAll(){
-  return state.tx.reduce((a,b)=>a+b.amount,0);
 }
 
 // -----------------------------
@@ -264,39 +259,30 @@ function render(){
   const spend = spendFor(d);
   const {top}=topCategoryFor(d);
 
-  $("#balanceView").textContent = fmt(balanceAll());
-  $("#spendMonth").textContent = fmt(spend);
-  $("#incomeMonth").textContent = fmt(income||incomeObserved||0);
-  $("#topCat").textContent = top;
+  $("#balanceView") && ($("#balanceView").textContent = fmt(balanceAll()));
+  $("#spendMonth") && ($("#spendMonth").textContent = fmt(spend));
+  $("#incomeMonth") && ($("#incomeMonth").textContent = fmt(income||incomeObserved||0));
+  $("#topCat") && ($("#topCat").textContent = top);
 
-  const ul=$("#txList"); ul.innerHTML="";
-  for(const t of state.tx){
-    const li=document.createElement("li");
-    const left=document.createElement("div"); const right=document.createElement("div");
-    left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString('fr-FR')}</div>`;
-    right.innerHTML=`<span class="${t.amount<0?'neg':'pos'}">${fmt(t.amount)}</span>`;
-    li.appendChild(left); li.appendChild(right); ul.appendChild(li);
+  const ul=$("#txList"); if (ul){ ul.innerHTML="";
+    for(const t of state.tx){
+      const li=document.createElement("li");
+      const left=document.createElement("div"); const right=document.createElement("div");
+      left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString('fr-FR')}</div>`;
+      right.innerHTML=`<span class="${t.amount<0?'neg':'pos'}">${fmt(t.amount)}</span>`;
+      li.appendChild(left); li.appendChild(right); ul.appendChild(li);
+    }
   }
 
-  const wrap=$("#budgets"); wrap.innerHTML="";
-  const byCat = byCategoryFor(d);
-  for(const [cat,goal] of Object.entries(state.budgets)){
-    const used = byCat[cat]||0; const pct=Math.min(100, Math.round((used/goal)*100));
-    const card=document.createElement("div"); card.className="box"; card.style.minWidth="220px";
-    card.innerHTML=`<div class="small">${cat} — objectif ${fmt(goal)}</div>
-      <div class="progress" style="margin-top:8px"><i style="width:${pct}%"></i></div>
-      <div class="small">${fmt(used)} / ${fmt(goal)} (${pct}%)</div>`;
-    wrap.appendChild(card);
-  }
-
-  // Affiche un mini-statut revenu si saisi
-  const incomeBadge = $("#incomeBadge");
-  if (incomeBadge){
-    if (incomePlanned!=null){
-      incomeBadge.textContent = `Revenu planifié ${fmt(incomePlanned)} (${mkey(d)})`;
-      incomeBadge.style.display = "inline-block";
-    } else {
-      incomeBadge.style.display = "none";
+  const wrap=$("#budgets"); if (wrap){ wrap.innerHTML="";
+    const byCat = byCategoryFor(d);
+    for(const [cat,goal] of Object.entries(state.budgets)){
+      const used = byCat[cat]||0; const pct=Math.min(100, Math.round((used/goal)*100));
+      const card=document.createElement("div"); card.className="box"; card.style.minWidth="220px";
+      card.innerHTML=`<div class="small">${cat} — objectif ${fmt(goal)}</div>
+        <div class="progress" style="margin-top:8px"><i style="width:${pct}%"></i></div>
+        <div class="small">${fmt(used)} / ${fmt(goal)} (${pct}%)</div>`;
+      wrap.appendChild(card);
     }
   }
 }
@@ -305,7 +291,7 @@ function render(){
 // CHAT & PERSONA
 // -----------------------------
 function pushPersona(role, text){
-  const box=$("#chatBox");
+  const box=$("#chatBox"); if(!box) return;
   const wrap=document.createElement("div");
   wrap.className="msg " + (role==="me"?"me":"ai");
 
@@ -359,7 +345,7 @@ function pushPersona(role, text){
 
 function typeLikeAI(text){
   return new Promise(async (resolve)=>{
-    const box=$("#chatBox");
+    const box=$("#chatBox"); if(!box){ resolve(); return; }
     const wrap=document.createElement("div");
     wrap.className="msg ai";
     const hue = Number(state.aiPersona.bubbleHue || 225);
@@ -392,14 +378,14 @@ function typeLikeAI(text){
 }
 
 async function sendChat(){
-  const q=$("#chatInput").value.trim(); if(!q) return;
+  const q=$("#chatInput")?.value?.trim(); if(!q) return;
   $("#chatInput").value=""; pushPersona("me", q);
-  $("#thinkingBar").style.width="15%";
+  $("#thinkingBar") && ($("#thinkingBar").style.width="15%");
   try{
     let ans="";
     if (state.aiMode==="demo"){
       ans = personaWrap(brainAnswer(q));
-      await sleep(250+Math.random()*350);
+      await sleep(180+Math.random()*320);
       await typeLikeAI(ans);
     }else{
       if (!state.apiKey){
@@ -411,13 +397,12 @@ async function sendChat(){
       }
     }
   }catch(e){ console.error(e); await typeLikeAI(personaWrap("Oups, petite erreur. Reste en mode Démo si besoin.")); }
-  finally{ $("#thinkingBar").style.width="0%"; }
+  finally{ $("#thinkingBar") && ($("#thinkingBar").style.width="0%"); }
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function personaWrap(text){ const p=state.aiPersona; const signature=p.emoji?` ${p.emoji}`:""; return text+signature; }
 function personaPrompt(userMsg){
-  // Envoie un contexte riche au modèle (si API)
   const d=new Date(); const by=byCategoryFor(d); const inc=incomeFinalFor(d)||0; const spent=spendFor(d);
   const ctx = `Contexte: mois=${mkey(d)} revenu=${inc} dépenses=${spent} catégories=${JSON.stringify(by)}`;
   const p = state.aiPersona;
@@ -427,7 +412,7 @@ function personaPrompt(userMsg){
 function personaHelloAndTOS(force=false){
   if (!state.aiPersona.enabled) return;
   const p = state.aiPersona;
-  if (force || $("#chatBox").childElementCount === 0){
+  if (force || $("#chatBox")?.childElementCount === 0){
     const greet = (p.greeting || "").replace("{{name}}", p.name).replace("{{role}}", p.role);
     pushPersona("ai", greet || `Bonjour ! Je suis ${p.name}.`);
   }
@@ -440,115 +425,170 @@ function personaHelloAndTOS(force=false){
 // -----------------------------
 // BUDGET BRAIN — intents & réponses
 // -----------------------------
+function parseAmountEUR(q){
+  // attrape "1000", "1 000", "1.000", "1000€", etc.
+  const m = q.replace(',', '.').match(/(\d[\d\s.,]*)\s*€?/);
+  if (!m) return null;
+  const num = parseFloat(m[1].replace(/\s|\./g,''));
+  return isNaN(num) ? null : num;
+}
+function parseTopN(q){
+  const m = q.match(/\btop\s*(\d+)/i);
+  if (!m) return 5;
+  const n=parseInt(m[1],10);
+  return Math.max(1, Math.min(20, n));
+}
+function detectPeriod(q){
+  const low=q.toLowerCase();
+  if (/(mois prochain|prochain mois)/.test(low)){
+    const d=new Date(); d.setMonth(d.getMonth()+1); return d;
+  }
+  if (/(mois dernier|dernier mois|le mois pass[ée])/.test(low)){
+    const d=new Date(); d.setMonth(d.getMonth()-1); return d;
+  }
+  return new Date(); // ce mois
+}
+
 function brainAnswer(q){
-  const d=new Date();
+  const d = detectPeriod(q);
   const lower=q.toLowerCase();
 
-  // Quick switches
-  const askIncomeSet = /(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)/.test(lower) || /changer.*revenu/.test(lower);
-  if (askIncomeSet) return "Clique sur le bouton 💶 Revenu à côté du chat pour saisir/mettre à jour le revenu de chaque mois. Je m’y base pour tous mes calculs.";
-
-  // Core numbers
+  // Numéros de base
   const income = incomeFinalFor(d) || 0;
   const incomeObs = incomeObservedFor(d) || 0;
   const spent = spendFor(d) || 0;
-  const {top} = topCategoryFor(d);
   const by = byCategoryFor(d);
+  const {top} = topCategoryFor(d);
   const {avgDaily, forecast, daysPassed, daysInMonth} = forecastEndOfMonth();
-  const balance = balanceAll();
+  const budget = budget50_30_20(d);
 
-  // Helpers
-  const safeToSpend = ()=>{
-    const fixed = (by["Loyer"]||0) + (by["Abonnements"]||0) + (by["Transport"]||0)*0.4; // approx part fixe transport
-    const already = spent;
+  // 1) Intent: set income (guidance)
+  if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre|modifier)/.test(lower) || /changer.*revenu/.test(lower)){
+    return "Clique sur **💶 Revenu** pour saisir/mettre à jour le revenu de chaque mois. C’est cette valeur qui pilote mes calculs.";
+  }
+
+  // 2) Intent: how to save X euros
+  if (/(économis|épargn|mettre de c[oô]t[ée]).*\d/.test(lower)){
+    const target = parseAmountEUR(q) || 0;
     const inc = income || incomeObs;
-    const left = Math.max(0, inc - fixed - already);
-    const perDay = left/Math.max(1, (daysInMonth - daysPassed));
-    return {left, perDay};
-  };
-
-  const propBudget = ()=>{
-    const base = budget50_30_20(d);
-    if (!base) return "J'ai besoin d'un revenu (observé ou saisi) pour proposer un budget précis. Clique sur 💶 Revenu pour l’indiquer.";
-    // Adapter “needs” avec loyer observé si connu
-    const loyer = by["Loyer"]||0;
-    const needs = Math.max(loyer, base.needs*0.5) + Math.max(0, (by["Courses"]||0)); // ancre sur dépenses déjà vues
-    const wants = Math.max(base.wants*0.5, (by["Sorties"]||0));
-    const save = Math.max(base.save, Math.max(0, (income - spent) * 0.4)); // pousser l’épargne s’il reste bcp
-    return `Proposition budget (adapté 50/30/20) sur revenu ${fmt(base.income)} :
-- Besoins (logement, factures, courses) ≈ ${fmt(needs)}  
-- Plaisir ≈ ${fmt(wants)}  
-- Épargne/objectif ≈ ${fmt(save)}  
-Ajuste: Loyer ${fmt(loyer)} • Abonnements ${fmt(by["Abonnements"]||0)} • Courses ${fmt(by["Courses"]||0)}.`;
-  };
-
-  const makeSavingsPlan = (target)=>{
-    // répartir sur reste de mois
-    const daysLeft = Math.max(1, daysInMonth - daysPassed);
-    const perDay = target/daysLeft;
-    const perWeek = target/4;
-    return `Plan épargne ${fmt(target)} : ~${fmt(perWeek)}/semaine (≈ ${fmt(perDay)}/jour) d'ici fin de mois.`;
-  };
-
-  const subs = subscriptionsHeuristics();
-
-  // INTENTS
-  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)){
-    return `Top catégorie ce mois-ci : **${top}** (${fmt(by[top]||0)}). Conseil : baisse de 10–15% ${top} et réalloue en épargne automatique.`;
+    if (!inc) return "Indique d’abord ton revenu (💶 Revenu) pour que je te calcule un plan d’épargne précis.";
+    // exclusions "fixes"
+    const fixedCats = new Set(["Loyer","Abonnements"]);
+    const variableCats = Object.entries(by).filter(([k])=>!fixedCats.has(k));
+    variableCats.sort((a,b)=> b[1]-a[1]); // plus grosses d'abord
+    let remaining = target;
+    const cuts=[];
+    for (const [cat,val] of variableCats){
+      if (remaining<=0) break;
+      const cut = Math.min(remaining, Math.round(val*0.25)); // coupe max 25% par cat
+      if (cut>0){ cuts.push([cat,cut]); remaining-=cut; }
+    }
+    if (remaining>0){
+      // proposer un mix hebdo/journalier
+      const perDay = Math.ceil((remaining)/Math.max(1, daysInMonth-daysPassed));
+      cuts.push(["Divers/achats plaisir", perDay*3]); // idée indicative
+      remaining -= perDay*3;
+    }
+    const lines = cuts.map(([c,v])=>`• ${c}: −${fmt(v)}`).join("\n");
+    const plan = `Objectif **${fmt(target)}** ce mois-ci. Plan de coupes proposé :\n${lines}\n` +
+                 `Astuce: retire **${fmt(Math.max(5, Math.ceil(target/30)))} / jour** en espèces pour te limiter.`;
+    return plan;
   }
 
-  if (/(budget|plafond|enveloppe)/.test(lower)) return propBudget();
+  // 3) Intent: budget / plafond / enveloppe
+  if (/(budget|plafond|enveloppe)/.test(lower)){
+    if (!budget) return "Dis-moi ton revenu via 💶 Revenu pour générer un budget précis (règle 50/30/20 adaptée).";
+    const loyer = by["Loyer"]||0, subs = by["Abonnements"]||0;
+    const needsAdj = Math.max(budget.needs, loyer + (by["Courses"]||0) + subs*0.5);
+    const wantsAdj = Math.max(budget.wants, (by["Sorties"]||0));
+    const saveAdj  = Math.max(budget.save, Math.max(0, (income||incomeObs) - spent) * 0.4);
+    return `Budget **${mkey(d)}** (50/30/20 adapté, revenu ${fmt(budget.income)}) :
+- Besoins ≈ **${fmt(needsAdj)}** (loyer, factures, courses)
+- Plaisir ≈ **${fmt(wantsAdj)}**
+- Épargne/objectif ≈ **${fmt(Math.round(saveAdj))}**`;
+  }
 
+  // 4) Intent: reste à dépenser (safe to spend)
   if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)){
-    const s = safeToSpend();
-    return `Reste à dépenser ce mois-ci ≈ ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour). Astuce : verrouille les achats “plaisir” à ${fmt(Math.max(5, s.perDay*0.6))}/jour pour garder de la marge.`;
+    const inc = income || incomeObs;
+    if (!inc) return "J’ai besoin de ton revenu (💶) pour calculer un reste à dépenser fiable.";
+    const fixed = (by["Loyer"]||0) + (by["Abonnements"]||0);
+    const left = Math.max(0, inc - fixed - spent);
+    const perDay = left / Math.max(1, (daysInMonth - daysPassed));
+    return `Reste à dépenser ≈ **${fmt(left)}** (≈ **${fmt(Math.max(0, Math.round(perDay)))} / jour**). Verrouille tes achats plaisir à ~${fmt(Math.max(5, perDay*0.6))}/jour.`;
   }
 
-  if (/(prévision|fin de mois|projection)/.test(lower)){
-    return `Prévision fin de mois : dépenses ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours). Pour tenir l’objectif, vise ≤ ${fmt(Math.max(0,(income||incomeObs)-forecast))} de reste.`;
+  // 5) Intent: projection fin de mois
+  if (/(prévision|projection|fin de mois)/.test(lower)){
+    return `Prévision fin de mois : dépenses ≈ **${fmt(forecast)}** (moyenne **${fmt(avgDaily)}/jour**, ${daysPassed}/${daysInMonth} jours). `+
+           `Pour finir positif, vise ≤ **${fmt(Math.max(0, (income||incomeObs) - forecast))}** de marge.`;
   }
 
-  if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)){
-    const base = budget50_30_20(d);
-    if (!base) return "Dis-moi ton revenu du mois via 💶 Revenu et je calcule immédiatement une épargne ciblée (50/30/20 adapté).";
-    const target = Math.max(50, Math.round(base.save));
-    return `Capacité d’épargne conseillée ce mois-ci : ${fmt(target)} (règle 50/30/20). ${makeSavingsPlan(target)}`;
-  }
-
-  if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
-    if (!subs.length) return "Je n’ai pas détecté d’abonnements récurrents évidents. Ajoute des étiquettes claires (ex: 'Abonnement X').";
+  // 6) Intent: abonnements
+  if (/abonnement|récurrent|spotify|netflix|prime|icloud|canal|deezer|youtube/.test(lower)){
+    const subs = subscriptionsHeuristics();
+    if (!subs.length) return "Je ne vois pas d’abonnements évidents. Ajoute des labels clairs (ex: “Abonnement X”) pour les détecter.";
     const lines = subs.slice(0,6).map(s=>`• ${s.label} ~ ${fmt(s.avg)}/mois (dernier: ${s.lastDate.toLocaleDateString('fr-FR')})`).join("\n");
-    return `Abonnements possibles repérés :\n${lines}\nAudit: supprime le superflu, regroupe sur un seul moyen de paiement, pose une alerte 48h avant renouvellement.`;
+    return `Abonnements repérés :\n${lines}\nAstuce: regroupe sur une seule carte, mets des rappels 48h avant renouvellement.`;
   }
 
+  // 7) Intent: anomalies / dépenses inhabituelles
   if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)){
-    // montants négatifs > 2x moyenne de leur catégorie
-    const by=byCategoryFor(d);
-    const avgByCat={}; for (const [k,v] of Object.entries(by)) avgByCat[k]=v/Math.max(1, monthTx(d).filter(t=>t.amount<0 && t.cat===k).length);
-    const anomalies = monthTx(d).filter(t=> t.amount<0 && Math.abs(t.amount) > (avgByCat[t.cat]||0)*2);
-    if (!anomalies.length) return "Rien d’inhabituel détecté sur ce mois. Surveille trotzdem les paiements internationaux ou doublons le même jour.";
-    const lines = anomalies.slice(0,5).map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString('fr-FR')}`).join("\n");
-    return `Alertes potentielles (montants 2× supérieurs à l’habitude) :\n${lines}\nVérifie et conteste si non autorisé.`;
+    const tx = monthTx(d);
+    const byCat=byCategoryFor(d);
+    const avgByCat={};
+    for (const [k,v] of Object.entries(byCat)){
+      const count = tx.filter(t=>t.amount<0 && t.cat===k).length;
+      avgByCat[k]= v/Math.max(1,count);
+    }
+    const anomalies = tx
+      .filter(t=> t.amount<0 && Math.abs(t.amount) > (avgByCat[t.cat]||0)*2)
+      .sort((a,b)=> Math.abs(b.amount)-Math.abs(a.amount))
+      .slice(0,5);
+    if (!anomalies.length) return "Rien d’inhabituel détecté ce mois-ci.";
+    const lines = anomalies.map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString('fr-FR')}`).join("\n");
+    return `Alertes potentielles (≥2× la moyenne de leur catégorie) :\n${lines}\nVérifie et conteste si non autorisé.`;
   }
 
-  if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)){
+  // 8) Intent: dettes / crédits
+  if (/(dette|crédit|rembourser|intér[êe]ts|loan)/.test(lower)){
     const room = Math.max(0, (income||incomeObs) - spent);
-    return `Stratégie dettes : consacre ${fmt(Math.max(20, room*0.6))}/mois au remboursement accéléré. Méthode **avalanche** (taux fort en priorité) → gagne des intérêts et libère du cashflow.`;
+    const monthly = Math.max(20, Math.round(room*0.6));
+    return `Stratégie dettes : consacre **${fmt(monthly)}/mois** au remboursement. Méthode **avalanche** (taux le plus élevé d’abord) → économise des intérêts et libère du cashflow.`;
   }
 
+  // 9) Intent: dépense par catégorie
+  if (/(d[ée]pens[ée]s?).*(courses|sorties|transport|loyer|abonnements|autres)/.test(lower)){
+    const cat = ["Courses","Sorties","Transport","Loyer","Abonnements","Autres"].find(c=> lower.includes(c.toLowerCase()));
+    const val = by[cat]||0;
+    return `Dépenses **${cat}** sur ${mkey(d)} : **${fmt(val)}**.`;
+  }
+
+  // 10) Intent: plus grosses dépenses
+  if (/(plus grandes|grosses|top).*(d[ée]pens[ée]s?)/.test(lower)){
+    const n = parseTopN(q);
+    const big = monthTx(d).filter(t=>t.amount<0).sort((a,b)=> Math.abs(b.amount)-Math.abs(a.amount)).slice(0,n);
+    if (!big.length) return "Aucune dépense ce mois-ci.";
+    const lines = big.map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} — ${new Date(t.ts).toLocaleDateString('fr-FR')}`).join("\n");
+    return `Top ${big.length} dépenses ${mkey(d)} :\n${lines}`;
+  }
+
+  // 11) Intent: revenu pris en compte
   if (/(revenu|salaire|pay[eé]|gains).*(combien|pris|consid[ée]r|pris en compte)/.test(lower)){
     const planned = incomePlannedFor(d);
     return planned!=null
-      ? `Pour ${mkey(d)} j’utilise ton revenu saisi : ${fmt(planned)}. Tu peux l’ajuster via 💶 Revenu.`
-      : `Je n’ai pas de revenu saisi pour ${mkey(d)}. J’estime ${fmt(incomeObs)} depuis les entrées du mois. Tu peux le définir via 💶 Revenu.`;
+      ? `Pour **${mkey(d)}** j’utilise ton **revenu saisi** : **${fmt(planned)}**. Ajustable via 💶 Revenu.`
+      : `Pas de revenu saisi pour **${mkey(d)}**. J’estime **${fmt(incomeObs)}** à partir des entrées. Tu peux fixer une valeur via 💶 Revenu.`;
   }
 
-  // Fallback — résumé exécutif
-  const spendPct = (income||incomeObs)>0 ? Math.round((spent/(income||incomeObs))*100) : 0;
-  const budgetLine = budget50_30_20(d)
-    ? `Repère budget (50/30/20) : besoins ${fmt(budget50_30_20(d).needs)}, plaisir ${fmt(budget50_30_20(d).wants)}, épargne ${fmt(budget50_30_20(d).save)}.`
-    : `Ajoute ton revenu via 💶 pour une recommandation 50/30/20.`;
-  return `Résumé ${mkey(d)} — Revenus: ${fmt(income||incomeObs)}, Dépenses: ${fmt(spent)} (${spendPct}% des revenus). Catégorie la plus gourmande : ${top}. ${budgetLine}`;
+  // 12) Fallback — résumé exécutif
+  const baseInc = income || incomeObs;
+  const spendPct = baseInc>0 ? Math.round((spent/baseInc)*100) : 0;
+  const budgetLine = budget
+    ? `Repère budget (50/30/20) : besoins ${fmt(budget.needs)}, plaisir ${fmt(budget.wants)}, épargne ${fmt(budget.save)}.`
+    : `Ajoute ton revenu via 💶 pour une reco 50/30/20.`;
+  return `Résumé ${mkey(d)} — Revenus: **${fmt(baseInc)}**, Dépenses: **${fmt(spent)}** (${spendPct}% des revenus). `+
+         `Catégorie la plus gourmande : **${top}**. ${budgetLine}`;
 }
 
 // -----------------------------
@@ -575,19 +615,31 @@ async function remoteAI(qWithPersona, apiKey){
 // -----------------------------
 // PERSONA UI (injectée)
 // -----------------------------
+function updateChatTitle(){
+  const newTitle = state.aiPersona?.name || "Coach";
+  // 1) si on a des ids/class connus
+  const direct = $("#chatTitle") || document.querySelector('[data-chat-title]') || document.querySelector('.chat-title');
+  if (direct){ direct.textContent = newTitle; return; }
+  // 2) fallback: remplace tout nœud qui contient exactement "Coach IA" (ou commence par)
+  const nodes = document.querySelectorAll("h1,h2,h3,h4,div,span");
+  for (const n of nodes){
+    const txt = (n.textContent||"").trim();
+    if (txt === "Coach IA" || txt.startsWith("Coach IA")){
+      n.textContent = txt.replace("Coach IA", newTitle);
+      break;
+    }
+  }
+}
+
 function injectPersonaButtonAndPanel(){
   const chatFoot = $(".foot"); if (!chatFoot) return;
 
-  // Bouton ⚙️ Persona
+  // ⚙️ Persona
   const gear = document.createElement("button");
   gear.className = "btn"; gear.style.marginLeft = "4px"; gear.title = "Réglages Persona IA"; gear.textContent = "⚙️ Persona";
   gear.onclick = openPersonaPanel; chatFoot.appendChild(gear);
 
-  // Petit badge revenu courant
-  const badge = document.createElement("span");
-  badge.id="incomeBadge"; badge.className="small";
-  badge.style.marginLeft="8px"; badge.style.opacity=".75";
-  chatFoot.appendChild(badge);
+  // (Retiré) — pas de badge revenu ici (inutile visuellement)
 
   // Modal Persona
   const modal = document.createElement("div");
@@ -641,6 +693,7 @@ function injectPersonaButtonAndPanel(){
     p.typingSpeedMs = Math.max(5, Number($("#p_typing").value||p.typingSpeedMs));
     save();
     modal.style.display="none";
+    updateChatTitle();                 // <— met à jour "Coach IA" → prénom
     pushPersona("ai","Paramètres persona enregistrés ✅");
   };
   $("#personaReset").onclick = ()=>{
@@ -651,7 +704,7 @@ function injectPersonaButtonAndPanel(){
       showTOS: true, tosText: "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
       showTOSOncePerSession: true, _tosShownThisSession: false, typingSpeedMs: 18
     };
-    save(); modal.style.display="none"; pushPersona("ai","Persona réinitialisée.");
+    save(); modal.style.display="none"; updateChatTitle(); pushPersona("ai","Persona réinitialisée.");
   };
 
   function openPersonaPanel(){
