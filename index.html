@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0d14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/icon-192.png" />
+  <title>BankIA — Démo Web</title>
+  <style>
+    /* ---- Design system (modern, minimal) ---- */
+    :root{
+      --bg:#0b0d14;           /* deep space */
+      --card:#0f1320f2;       /* glassy */
+      --stroke:#1d2334;       /* borders */
+      --text:#e9eef7;         /* primary text */
+      --muted:#9aa6bf;        /* secondary */
+      --accent:#6aa6ff;       /* electric blue */
+      --accent-2:#9f7bff;     /* violet */
+      --ok:#22c55e;
+      --danger:#ef4444;
+      --ring: 0 0 0 1px var(--stroke);
+      --shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.02);
+      --rad: 18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:
+        radial-gradient(1200px 800px at 80% -10%, rgba(88, 143, 255,.12), transparent 60%),
+        radial-gradient(900px 700px at -10% 10%, rgba(160, 120, 255,.12), transparent 50%),
+        var(--bg);
+      color:var(--text);
+      font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+      letter-spacing:.2px;
+    }
+    a{color:inherit}
+    .container{max-width:1120px;margin:0 auto;padding:24px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand img{width:36px;height:36px;border-radius:12px}
+    .brand h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px}
+    .tag{font-size:12px;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke)}
+    .btn{appearance:none;border:1px solid var(--stroke);background:linear-gradient(180deg,#141a2b,#0e1423);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)}
+    .btn.primary{border-color:transparent;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+    .btn.ghost{background:transparent}
+    .btn.ghost:hover{background:rgba(255,255,255,.04)}
+    input,select,textarea{background:rgba(9,12,20,.7);backdrop-filter: blur(6px); color:var(--text);border:1px solid var(--stroke);border-radius:12px;padding:10px}
+    input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke);font-size:12px;color:var(--muted)}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+    .card{background:var(--card);border:1px solid var(--stroke);border-radius:var(--rad);padding:16px;box-shadow:var(--shadow);backdrop-filter: blur(8px)}
+    .card h2{margin:0 0 10px 0;font-size:16px;letter-spacing:.2px}
+    .hero{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px}
+    .hero-title{font-size:22px;font-weight:700;margin:0}
+    .hero-sub{color:var(--muted);font-size:13px;margin:0}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .balance{font-size:30px;font-weight:800;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
+    .small{font-size:12px;color:var(--muted)}
+    .list{margin:0;padding:0;list-style:none}
+    .list li{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px dashed #1b2233}
+    .list li:last-child{border-bottom:none}
+    .pos{color:var(--ok)} .neg{color:var(--danger)}
+    .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}
+    .kpi .box{background:rgba(14,19,35,.7);border:1px solid var(--stroke);padding:10px;border-radius:12px;box-shadow:var(--shadow)}
+    .progress{height:8px;background:#0d1220;border-radius:999px;overflow:hidden;border:1px solid var(--stroke)}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%}
+    .chat{display:flex;flex-direction:column;gap:10px;height:420px}
+    .chat-box{flex:1;background:rgba(9,12,20,.7);border:1px solid var(--stroke);border-radius:12px;padding:12px;overflow:auto}
+    .msg{max-width:85%;padding:10px 12px;border-radius:12px;margin:8px 0;white-space:pre-wrap}
+    .me{background:#16203a; margin-left:auto; border:1px solid #253657}
+    .ai{background:#0f172a;border:1px solid #1e2a44}
+    .foot{display:flex;gap:8px}
+    .warn{color:#fbbf24;font-size:12px}
+    .bud-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .box{background:rgba(14,19,35,.6);border:1px solid var(--stroke);padding:12px;border-radius:12px}
+    footer{margin-top:18px;text-align:center;color:var(--muted);font-size:12px}
+    @media (max-width:980px){.grid{grid-template-columns:1fr} .chat{height:360px}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <img src="assets/icon-192.png" alt="BankIA" />
+        <h1>BankIA</h1>
+        <span class="tag">DÉMO WEB</span>
+      </div>
+      <div class="row">
+        <span class="pill">localStorage — gratuit</span>
+        <button id="installBtn" class="btn ghost">Installer (PWA)</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="hero">
+        <div>
+          <h2 class="hero-title">Ton compte intelligent, version démo</h2>
+          <p class="hero-sub">Teste l’UX et l’assistant IA sans serveur ni KYC. Tout reste en local.</p>
+        </div>
+        <div class="row">
+          <select id="aiMode" class="btn">
+            <option value="demo" selected>Démo IA (gratuit, local)</option>
+            <option value="api">Clé API (optionnel)</option>
+          </select>
+          <input id="apiKey" placeholder="Clé API (optionnel)" style="display:none;min-width:260px"/>
+        </div>
+      </div>
+      <div class="row">
+        <input id="email" placeholder="Email (démo)" />
+        <input id="name" placeholder="Nom" />
+        <button class="btn primary" id="loginBtn">Entrer</button>
+        <button class="btn" id="logoutBtn">Sortir</button>
+      </div>
+      <p class="small" style="margin-top:8px">⚠️ Démo uniquement : données stockées en local sur ton appareil.</p>
+    </section>
+
+    <div class="grid" style="margin-top:14px">
+      <section class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h2>Comptes & Transactions</h2>
+          <span class="pill" id="monthTag"></span>
+        </div>
+        <div class="balance" id="balanceView">€0.00</div>
+        <div class="kpi">
+          <div class="box"><div class="small">Dépenses du mois</div><div id="spendMonth">€0</div></div>
+          <div class="box"><div class="small">Revenus du mois</div><div id="incomeMonth">€0</div></div>
+          <div class="box"><div class="small">Top catégorie</div><div id="topCat">–</div></div>
+        </div>
+
+        <ul class="list" id="txList"></ul>
+
+        <div class="row" style="margin-top:8px">
+          <input id="txLabel" placeholder="Libellé (ex: Carrefour)" />
+          <input id="txAmount" type="number" step="0.01" placeholder="Montant (+/-)" />
+          <select id="txCat">
+            <option>Courses</option><option>Sorties</option><option>Transport</option>
+            <option>Loyer</option><option>Abonnements</option><option>Autres</option>
+          </select>
+          <button class="btn primary" id="addTx">Ajouter</button>
+          <button class="btn" id="resetData">Réinitialiser</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" id="exportBtn">Exporter JSON</button>
+          <input type="file" id="importFile" style="display:none" accept="application/json" />
+          <button class="btn ghost" id="importBtn">Importer JSON</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h2>Coach IA</h2>
+          <span class="small">Démo locale + option API</span>
+        </div>
+        <div class="chat">
+          <div class="chat-box" id="chatBox"></div>
+          <div class="foot">
+            <input id="chatInput" placeholder="Ex: comment économiser 100€ ce mois-ci ?" style="flex:1"/>
+            <button class="btn primary" id="sendChat">Envoyer</button>
+          </div>
+          <div class="progress"><i id="thinkingBar"></i></div>
+          <div class="warn" id="warn"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:14px">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2>Budgets</h2>
+        <span class="small">Objectifs mensuels par catégorie</span>
+      </div>
+      <div class="bud-row" id="budgets"></div>
+    </section>
+
+    <footer>© 2025 BankIA — Crée par Dylan Kessler & Ricardo Caupenne / Version de test en local</footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
