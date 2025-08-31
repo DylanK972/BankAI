@@ -6,15 +6,14 @@
   <meta name="theme-color" content="#0b0d14" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="assets/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
   <title>BankIA — Démo Web</title>
-  <!-- 👉 charge le CSS -->
-  <link rel="stylesheet" href="styles.css?v=1.0" />
 </head>
 <body>
   <noscript>Cette démo nécessite JavaScript.</noscript>
 
   <div class="container">
-    <!-- Header -->
+    <!-- Barre de marque (collante via CSS) -->
     <header>
       <div class="brand" aria-label="Identité produit">
         <img src="assets/icon-192.png" alt="Logo BankIA" />
@@ -27,11 +26,11 @@
       </div>
     </header>
 
-    <!-- Bloc démo / login / clé API — MASQUÉ mais conservé pour app.js (⚠️ pas de #monthTag ici) -->
+    <!-- Bloc démo / login / clé API — MASQUÉ mais conservé pour app.js -->
     <section class="card dev-hidden" id="demoBlock" aria-hidden="true">
       <div class="row" style="justify-content:space-between;align-items:center;gap:12px">
         <div class="row" style="align-items:center;gap:8px">
-          <span class="pill">Mois <b class="small">(géré plus bas)</b></span>
+          <span class="pill">Mois <b id="monthTag" style="margin-left:6px;color:#fff"></b></span>
         </div>
         <div class="row">
           <select id="aiMode" class="btn" aria-label="Mode IA">
@@ -51,14 +50,13 @@
     </section>
 
     <main class="grid" role="main">
-      <!-- Comptes & Transactions -->
+      <!-- COMPTES & MOUVEMENTS -->
       <section class="card card-hover" aria-labelledby="section-transactions">
         <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
           <div class="row" style="align-items:center;gap:10px">
             <h2 id="section-transactions">Comptes & Transactions</h2>
           </div>
-          <!-- 👉 UNIQUE #monthTag, utilisé par app.js -->
-          <span class="pill" id="monthTag" aria-live="polite" aria-atomic="true"></span>
+          <span class="pill" id="monthTagVisible" aria-live="polite" aria-atomic="true"></span>
         </header>
 
         <div class="balance" id="balanceView" aria-label="Solde global">€0.00</div>
@@ -80,7 +78,7 @@
 
         <ul class="list" id="txList" aria-label="Historique des transactions"></ul>
 
-        <!-- Contrôles manuels masqués (préservés pour app.js) -->
+        <!-- Contrôles manuels masqués (présents pour prototypage/app.js) -->
         <div class="row dev-hidden" style="margin-top:8px" aria-hidden="true">
           <input id="txLabel" placeholder="Libellé (ex: Carrefour)" />
           <input id="txAmount" type="number" step="0.01" placeholder="Montant (+/-)" inputmode="decimal" />
@@ -98,7 +96,7 @@
         </div>
       </section>
 
-      <!-- Assistant financier -->
+      <!-- ASSISTANT -->
       <section class="card card-hover" aria-labelledby="section-assistant">
         <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
           <h2 id="coachTitle">Coach IA</h2>
@@ -115,15 +113,16 @@
                    style="flex:1"
                    autocomplete="off" />
             <button class="btn primary" id="sendChat" aria-label="Envoyer le message">Envoyer</button>
+            <!-- app.js injecte ici 🎨 Personnalise-moi & 💶 Revenu -->
           </div>
 
-          <div class="progress" aria-hidden="true"><i id="thinkingBar"></i></div>
+          <div class="progress"><i id="thinkingBar"></i></div>
           <div class="small" id="warn" style="opacity:.85" aria-live="polite"></div>
         </div>
       </section>
     </main>
 
-    <!-- Budgets -->
+    <!-- BUDGETS -->
     <section class="card card-hover" style="margin-top:14px" aria-labelledby="section-budgets">
       <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
         <h2 id="section-budgets">Budgets</h2>
@@ -136,5 +135,19 @@
   </div>
 
   <script src="app.js"></script>
+
+  <!-- helper de synchro du badge mois -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const hiddenTag = document.querySelector('#demoBlock #monthTag');
+      const visibleTag = document.getElementById('monthTagVisible');
+      if (hiddenTag && visibleTag) {
+        const sync = () => { visibleTag.textContent = hiddenTag.textContent || ''; };
+        setTimeout(sync, 0);
+        setTimeout(sync, 80);
+        setTimeout(sync, 240);
+      }
+    });
+  </script>
 </body>
 </html>
