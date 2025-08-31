@@ -8,7 +8,7 @@ const TODAY = new Date();
 const MONTH = TODAY.toLocaleString("fr-FR", { month: "long", year: "numeric" });
 const pad = (n) => String(n).padStart(2, "0");
 const mkey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-const BUILD_VERSION = "v8"; // <- augmente ce numéro quand tu veux forcer l’update du SW
+const BUILD_VERSION = "v8"; // change ce numéro pour forcer l’update du SW
 
 // -----------------------------
 // STATE
@@ -42,17 +42,11 @@ const state = {
 };
 
 const KEY = "bankia_demo_state_v2";
-function save() {
-  localStorage.setItem(KEY, JSON.stringify(state));
-}
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
 function load() {
   const raw = localStorage.getItem(KEY);
   if (!raw) return;
-  try {
-    Object.assign(state, JSON.parse(raw));
-  } catch (e) {
-    console.warn(e);
-  }
+  try { Object.assign(state, JSON.parse(raw)); } catch (e) { console.warn(e); }
 }
 
 // -----------------------------
@@ -74,10 +68,7 @@ function init() {
     $("#apiKey").style.display = state.aiMode === "api" ? "block" : "none";
     save();
   };
-  $("#apiKey").oninput = (e) => {
-    state.apiKey = e.target.value;
-    save();
-  };
+  $("#apiKey").oninput = (e) => { state.apiKey = e.target.value; save(); };
 
   $("#addTx").onclick = addTx;
   $("#resetData").onclick = resetData;
@@ -85,28 +76,26 @@ function init() {
   $("#importBtn").onclick = () => $("#importFile").click();
   $("#importFile").onchange = importJSON;
 
+  // UI injectée
   injectPersonaButtonAndPanel();
   injectIncomePanel(); // 💶
 
   $("#sendChat").onclick = sendChat;
-  $("#chatInput").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") sendChat();
-  });
+  $("#chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
 
   // PWA install
   let deferredPrompt = null;
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    $("#installBtn") &&
-      ($("#installBtn").onclick = async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        deferredPrompt = null;
-      });
+    $("#installBtn") && ($("#installBtn").onclick = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt = null;
+    });
   });
 
-  // SW avec cache-busting
+  // Service worker versionné
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v=" + BUILD_VERSION);
 
   if (state.tx.length === 0) seedDemo();
@@ -116,7 +105,7 @@ function init() {
 }
 
 function updatePersonaTitle() {
-  const el = $("#coachTitle"); // <h3 id="coachTitle">Coach IA</h3> (si présent)
+  const el = $("#coachTitle"); // <h3 id="coachTitle">Coach IA</h3>
   if (el) el.textContent = state.aiPersona.name || "Coach IA";
 }
 
@@ -126,17 +115,13 @@ function updatePersonaTitle() {
 function login() {
   const email = $("#email").value.trim();
   const name = $("#name").value.trim() || "Utilisateur";
-  if (!email) {
-    alert("Email requis (démo)");
-    return;
-  }
+  if (!email) { alert("Email requis (démo)"); return; }
   state.user = { email, name };
   save();
   personaHelloAndTOS(true);
 }
 function logout() {
-  state.user = null;
-  save();
+  state.user = null; save();
   pushPersona("ai", "Session fermée. Reviens quand tu veux.");
 }
 
@@ -147,47 +132,30 @@ function addTx() {
   const label = $("#txLabel").value.trim();
   const amount = parseFloat($("#txAmount").value);
   const cat = $("#txCat").value;
-  if (!label || isNaN(amount)) {
-    alert("Libellé et montant requis");
-    return;
-  }
+  if (!label || isNaN(amount)) { alert("Libellé et montant requis"); return; }
   state.tx.unshift({ id: crypto.randomUUID(), label, amount, cat, ts: Date.now() });
-  $("#txLabel").value = "";
-  $("#txAmount").value = "";
-  save();
-  render();
+  $("#txLabel").value = ""; $("#txAmount").value = "";
+  save(); render();
 }
 function resetData() {
   if (!confirm("Tout réinitialiser ?")) return;
-  state.tx = [];
-  seedDemo();
-  save();
-  render();
+  state.tx = []; seedDemo(); save(); render();
 }
 
 function exportJSON() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = "bankia-demo.json";
-  a.click();
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = "bankia-demo.json"; a.click(); URL.revokeObjectURL(url);
 }
 function importJSON(evt) {
-  const file = evt.target.files?.[0];
-  if (!file) return;
+  const file = evt.target.files?.[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try {
       Object.assign(state, JSON.parse(reader.result));
-      save();
-      render();
-      pushPersona("ai", "Import terminé ✅");
-      updatePersonaTitle();
-    } catch (e) {
-      alert("JSON invalide");
-    }
+      save(); render(); pushPersona("ai", "Import terminé ✅"); updatePersonaTitle();
+    } catch (e) { alert("JSON invalide"); }
   };
   reader.readAsText(file);
 }
@@ -224,13 +192,9 @@ function monthTx(d = new Date()) {
   return state.tx.filter((t) => t.ts >= start.getTime() && t.ts < end.getTime());
 }
 function incomeObservedFor(d = new Date()) {
-  return monthTx(d)
-    .filter((t) => t.amount > 0)
-    .reduce((a, b) => a + b.amount, 0);
+  return monthTx(d).filter((t) => t.amount > 0).reduce((a, b) => a + b.amount, 0);
 }
-function incomePlannedFor(d = new Date()) {
-  return state.incomeByMonth[mkey(d)] || null;
-}
+function incomePlannedFor(d = new Date()) { return state.incomeByMonth[mkey(d)] || null; }
 function incomeFinalFor(d = new Date()) {
   const planned = incomePlannedFor(d);
   const observed = incomeObservedFor(d);
@@ -238,29 +202,16 @@ function incomeFinalFor(d = new Date()) {
   return observed;
 }
 function spendFor(d = new Date()) {
-  return Math.abs(
-    monthTx(d)
-      .filter((t) => t.amount < 0)
-      .reduce((a, b) => a + b.amount, 0)
-  );
+  return Math.abs(monthTx(d).filter((t) => t.amount < 0).reduce((a, b) => a + b.amount, 0));
 }
 function byCategoryFor(d = new Date()) {
   const res = {};
-  for (const t of monthTx(d)) {
-    if (t.amount < 0) res[t.cat] = (res[t.cat] || 0) + Math.abs(t.amount);
-  }
+  for (const t of monthTx(d)) if (t.amount < 0) res[t.cat] = (res[t.cat] || 0) + Math.abs(t.amount);
   return res;
 }
 function topCategoryFor(d = new Date()) {
-  const by = byCategoryFor(d);
-  let top = "–",
-    val = 0;
-  for (const [k, v] of Object.entries(by)) {
-    if (v > val) {
-      val = v;
-      top = k;
-    }
-  }
+  const by = byCategoryFor(d); let top = "–", val = 0;
+  for (const [k, v] of Object.entries(by)) if (v > val) { val = v; top = k; }
   return { top, val };
 }
 function subscriptionsHeuristics() {
@@ -300,9 +251,7 @@ function budget50_30_20(d = new Date()) {
   const save = income * 0.2;
   return { income, needs: Math.round(needs * 100) / 100, wants: Math.round(wants * 100) / 100, save: Math.round(save * 100) / 100 };
 }
-function balanceAll() {
-  return state.tx.reduce((a, b) => a + b.amount, 0);
-}
+function balanceAll() { return state.tx.reduce((a, b) => a + b.amount, 0); }
 
 // -----------------------------
 // RENDER
@@ -310,7 +259,6 @@ function balanceAll() {
 function render() {
   const d = new Date();
   const incomeObserved = incomeObservedFor(d);
-  const incomePlanned = incomePlannedFor(d);
   const income = incomeFinalFor(d);
   const spend = spendFor(d);
   const { top } = topCategoryFor(d);
@@ -320,22 +268,29 @@ function render() {
   $("#incomeMonth").textContent = fmt(income || incomeObserved || 0);
   $("#topCat").textContent = top;
 
-  const ul = $("#txList");
-  ul.innerHTML = "";
+  const ul = $("#txList"); ul.innerHTML = "";
   for (const t of state.tx) {
     const li = document.createElement("li");
     const left = document.createElement("div");
     const right = document.createElement("div");
-    left.innerHTML = `<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString(
-      "fr-FR"
-    )}</div>`;
+    left.innerHTML = `<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString("fr-FR")}</div>`;
     right.innerHTML = `<span class="${t.amount < 0 ? "neg" : "pos"}">${fmt(t.amount)}</span>`;
-    li.appendChild(left);
-    li.appendChild(right);
-    ul.appendChild(li);
+    li.appendChild(left); li.appendChild(right); ul.appendChild(li);
   }
 
-  // (on a supprimé le badge revenu sur demande)
+  // Cartes budgets (on garde) – pas de badge revenu
+  const wrap = $("#budgets"); if (wrap) {
+    wrap.innerHTML = "";
+    const byCat = byCategoryFor(d);
+    for (const [cat, goal] of Object.entries(state.budgets)) {
+      const used = byCat[cat] || 0; const pct = Math.min(100, Math.round((used / goal) * 100));
+      const card = document.createElement("div"); card.className = "box"; card.style.minWidth = "220px";
+      card.innerHTML = `<div class="small">${cat} — objectif ${fmt(goal)}</div>
+        <div class="progress" style="margin-top:8px"><i style="width:${pct}%"></i></div>
+        <div class="small">${fmt(used)} / ${fmt(goal)} (${pct}%)</div>`;
+      wrap.appendChild(card);
+    }
+  }
 }
 
 // -----------------------------
@@ -348,37 +303,24 @@ function pushPersona(role, text) {
 
   if (role === "ai" && state.aiPersona.enabled) {
     const head = document.createElement("div");
-    head.style.display = "flex";
-    head.style.alignItems = "center";
-    head.style.gap = "8px";
-    head.style.marginBottom = "6px";
+    head.style.display = "flex"; head.style.alignItems = "center"; head.style.gap = "8px"; head.style.marginBottom = "6px";
 
     const avatar = document.createElement("div");
-    avatar.style.width = "22px";
-    avatar.style.height = "22px";
-    avatar.style.borderRadius = "999px";
-    avatar.style.flex = "0 0 auto";
-    avatar.style.border = "1px solid rgba(255,255,255,.15)";
-    avatar.style.background = "#0e1423";
+    avatar.style.width = "22px"; avatar.style.height = "22px"; avatar.style.borderRadius = "999px";
+    avatar.style.flex = "0 0 auto"; avatar.style.border = "1px solid rgba(255,255,255,.15)"; avatar.style.background = "#0e1423";
     if (state.aiPersona.avatar) {
       avatar.style.backgroundImage = `url('${state.aiPersona.avatar}')`;
-      avatar.style.backgroundSize = "cover";
-      avatar.style.backgroundPosition = "center";
+      avatar.style.backgroundSize = "cover"; avatar.style.backgroundPosition = "center";
     } else {
-      avatar.style.display = "flex";
-      avatar.style.alignItems = "center";
-      avatar.style.justifyContent = "center";
-      avatar.style.fontSize = "12px";
+      avatar.style.display = "flex"; avatar.style.alignItems = "center"; avatar.style.justifyContent = "center"; avatar.style.fontSize = "12px";
       avatar.textContent = state.aiPersona.emoji || "🤖";
     }
 
     const name = document.createElement("div");
     name.textContent = state.aiPersona.name || "Assistant·e";
-    name.style.fontSize = "12px";
-    name.style.opacity = ".8";
+    name.style.fontSize = "12px"; name.style.opacity = ".8";
 
-    head.appendChild(avatar);
-    head.appendChild(name);
+    head.appendChild(avatar); head.appendChild(name);
 
     const hue = Number(state.aiPersona.bubbleHue || 225);
     wrap.style.border = "1px solid hsla(" + hue + ", 50%, 40%, 0.45)";
@@ -405,56 +347,32 @@ function typeLikeAI(text) {
     wrap.style.background = "linear-gradient(180deg, hsla(" + hue + ", 38%, 18%, .85), hsla(" + hue + ", 38%, 12%, .9))";
 
     const head = document.createElement("div");
-    head.style.display = "flex";
-    head.style.alignItems = "center";
-    head.style.gap = "8px";
-    head.style.marginBottom = "6px";
+    head.style.display = "flex"; head.style.alignItems = "center"; head.style.gap = "8px"; head.style.marginBottom = "6px";
     const avatar = document.createElement("div");
-    avatar.style.width = "22px";
-    avatar.style.height = "22px";
-    avatar.style.borderRadius = "999px";
-    avatar.style.flex = "0 0 auto";
-    avatar.style.border = "1px solid rgba(255,255,255,.15)";
-    avatar.style.background = "#0e1423";
+    avatar.style.width = "22px"; avatar.style.height = "22px"; avatar.style.borderRadius = "999px"; avatar.style.flex = "0 0 auto";
+    avatar.style.border = "1px solid rgba(255,255,255,.15)"; avatar.style.background = "#0e1423";
     if (state.aiPersona.avatar) {
       avatar.style.backgroundImage = `url('${state.aiPersona.avatar}')`;
-      avatar.style.backgroundSize = "cover";
-      avatar.style.backgroundPosition = "center";
+      avatar.style.backgroundSize = "cover"; avatar.style.backgroundPosition = "center";
     } else {
-      avatar.style.display = "flex";
-      avatar.style.alignItems = "center";
-      avatar.style.justifyContent = "center";
-      avatar.style.fontSize = "12px";
+      avatar.style.display = "flex"; avatar.style.alignItems = "center"; avatar.style.justifyContent = "center"; avatar.style.fontSize = "12px";
       avatar.textContent = state.aiPersona.emoji || "🤖";
     }
-    const name = document.createElement("div");
-    name.textContent = state.aiPersona.name || "Assistant·e";
-    name.style.fontSize = "12px";
-    name.style.opacity = ".8";
-    head.appendChild(avatar);
-    head.appendChild(name);
-    wrap.appendChild(head);
+    const name = document.createElement("div"); name.textContent = state.aiPersona.name || "Assistant·e"; name.style.fontSize = "12px"; name.style.opacity = ".8";
+    head.appendChild(avatar); head.appendChild(name); wrap.appendChild(head);
 
-    const body = document.createElement("div");
-    wrap.appendChild(body);
-    box.appendChild(wrap);
-    box.scrollTop = box.scrollHeight;
+    const body = document.createElement("div"); wrap.appendChild(body);
+    box.appendChild(wrap); box.scrollTop = box.scrollHeight;
 
     const speed = Math.max(5, Number(state.aiPersona.typingSpeedMs || 18));
-    for (let i = 0; i < text.length; i++) {
-      body.textContent += text[i];
-      await sleep(speed);
-      box.scrollTop = box.scrollHeight;
-    }
+    for (let i = 0; i < text.length; i++) { body.textContent += text[i]; await sleep(speed); box.scrollTop = box.scrollHeight; }
     resolve();
   });
 }
 
 async function sendChat() {
-  const q = $("#chatInput").value.trim();
-  if (!q) return;
-  $("#chatInput").value = "";
-  pushPersona("me", q);
+  const q = $("#chatInput").value.trim(); if (!q) return;
+  $("#chatInput").value = ""; pushPersona("me", q);
   $("#thinkingBar").style.width = "15%";
   try {
     let ans = "";
@@ -474,24 +392,15 @@ async function sendChat() {
   } catch (e) {
     console.error(e);
     await typeLikeAI(personaWrap("Oups, petite erreur. Reste en mode Démo si besoin."));
-  } finally {
-    $("#thinkingBar").style.width = "0%";
-  }
+  } finally { $("#thinkingBar").style.width = "0%"; }
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 function personaWrap(text) {
-  const p = state.aiPersona;
-  const signature = p.emoji ? " " + p.emoji : "";
-  return text + signature;
+  const p = state.aiPersona; const signature = p.emoji ? " " + p.emoji : ""; return text + signature;
 }
 function personaPrompt(userMsg) {
-  const d = new Date();
-  const by = byCategoryFor(d);
-  const inc = incomeFinalFor(d) || 0;
-  const spent = spendFor(d);
+  const d = new Date(); const by = byCategoryFor(d); const inc = incomeFinalFor(d) || 0; const spent = spendFor(d);
   const ctx = `Contexte: mois=${mkey(d)} revenu=${inc} dépenses=${spent} catégories=${JSON.stringify(by)}`;
   const p = state.aiPersona;
   const personaSystem = `Tu es ${p.name}, ${p.role}. Genre: ${p.gender}. Ton: ${p.tone}. Réponds concis, chiffré, actionnable.`;
@@ -506,8 +415,7 @@ function personaHelloAndTOS(force = false) {
   }
   if (p.showTOS && (!p.showTOSOncePerSession || !p._tosShownThisSession)) {
     pushPersona("ai", p.tosText || "Conditions d'utilisation : démo non contractuelle.");
-    p._tosShownThisSession = true;
-    save();
+    p._tosShownThisSession = true; save();
   }
 }
 
@@ -652,9 +560,9 @@ Ajuste: Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"] || 0)} •
 
   // Anomalies
   if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)) {
-    const by = byCategoryFor(d);
+    const byNow = byCategoryFor(d);
     const avgByCat = {};
-    for (const [k, v] of Object.entries(by)) {
+    for (const [k, v] of Object.entries(byNow)) {
       const n = monthTx(d).filter((t) => t.amount < 0 && t.cat === k).length;
       avgByCat[k] = v / Math.max(1, n);
     }
@@ -716,19 +624,12 @@ async function remoteAI(qWithPersona, apiKey) {
 // PERSONA UI (injectée)
 // -----------------------------
 function injectPersonaButtonAndPanel() {
-  const chatFoot = $(".foot");
-  if (!chatFoot) return;
+  const chatFoot = $(".foot"); if (!chatFoot) return;
 
   // ⚙️ Persona
   const gear = document.createElement("button");
-  gear.className = "btn";
-  gear.style.marginLeft = "4px";
-  gear.title = "Réglages Persona IA";
-  gear.textContent = "⚙️ Persona";
-  gear.onclick = openPersonaPanel;
-  chatFoot.appendChild(gear);
-
-  // (retiré: badge revenu)
+  gear.className = "btn"; gear.style.marginLeft = "4px"; gear.title = "Réglages Persona IA"; gear.textContent = "⚙️ Persona";
+  gear.onclick = openPersonaPanel; chatFoot.appendChild(gear);
 
   // Modal
   const modal = document.createElement("div");
@@ -736,13 +637,8 @@ function injectPersonaButtonAndPanel() {
   Object.assign(modal.style, { position: "fixed", inset: "0", background: "rgba(0,0,0,.55)", backdropFilter: "blur(4px)", display: "none", zIndex: "9999" });
   const card = document.createElement("div");
   Object.assign(card.style, {
-    maxWidth: "560px",
-    margin: "8vh auto",
-    background: "rgba(15,19,32,.95)",
-    border: "1px solid #1d2334",
-    borderRadius: "16px",
-    padding: "16px",
-    boxShadow: "0 10px 40px rgba(0,0,0,.5)",
+    maxWidth: "560px", margin: "8vh auto", background: "rgba(15,19,32,.95)",
+    border: "1px solid #1d2334", borderRadius: "16px", padding: "16px", boxShadow: "0 10px 40px rgba(0,0,0,.5)"
   });
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -770,8 +666,7 @@ function injectPersonaButtonAndPanel() {
       <button id="personaReset" class="btn">Réinitialiser</button>
       <button id="personaSave" class="btn primary">Enregistrer</button>
     </div>`;
-  modal.appendChild(card);
-  document.body.appendChild(modal);
+  modal.appendChild(card); document.body.appendChild(modal);
 
   $("#personaClose").onclick = () => (modal.style.display = "none");
   $("#personaSave").onclick = () => {
@@ -789,34 +684,18 @@ function injectPersonaButtonAndPanel() {
     p.showTOS = $("#p_tos_on").checked;
     p.showTOSOncePerSession = $("#p_tos_once").checked;
     p.typingSpeedMs = Math.max(5, Number($("#p_typing").value || p.typingSpeedMs));
-    save();
-    updatePersonaTitle();
-    modal.style.display = "none";
+    save(); updatePersonaTitle(); modal.style.display = "none";
     pushPersona("ai", "Paramètres persona enregistrés ✅");
   };
   $("#personaReset").onclick = () => {
     state.aiPersona = {
-      enabled: true,
-      name: "Camille",
-      role: "Assistante financière",
-      gender: "femme",
-      tone: "chaleureuse, claire et proactive",
-      emoji: "💙",
-      avatar: "",
-      bubbleHue: 225,
-      greeting:
-        "Bonjour ! Je suis {{name}}, {{role}}. Pose-moi ta première question et je te réponds avec des conseils concrets 😉",
-      showTOS: true,
-      tosText:
-        "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
-      showTOSOncePerSession: true,
-      _tosShownThisSession: false,
-      typingSpeedMs: 18,
+      enabled: true, name: "Camille", role: "Assistante financière", gender: "femme",
+      tone: "chaleureuse, claire et proactive", emoji: "💙", avatar: "", bubbleHue: 225,
+      greeting: "Bonjour ! Je suis {{name}}, {{role}}. Pose-moi ta première question et je te réponds avec des conseils concrets 😉",
+      showTOS: true, tosText: "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
+      showTOSOncePerSession: true, _tosShownThisSession: false, typingSpeedMs: 18
     };
-    save();
-    updatePersonaTitle();
-    modal.style.display = "none";
-    pushPersona("ai", "Persona réinitialisée.");
+    save(); updatePersonaTitle(); modal.style.display = "none"; pushPersona("ai", "Persona réinitialisée.");
   };
 
   function openPersonaPanel() {
@@ -841,29 +720,17 @@ function injectPersonaButtonAndPanel() {
 // INCOME PANEL (💶) — revenu par mois
 // -----------------------------
 function injectIncomePanel() {
-  const chatFoot = $(".foot");
-  if (!chatFoot) return;
+  const chatFoot = $(".foot"); if (!chatFoot) return;
 
   const btn = document.createElement("button");
-  btn.className = "btn";
-  btn.style.marginLeft = "4px";
-  btn.title = "Définir le revenu de ce mois";
-  btn.textContent = "💶 Revenu";
-  btn.onclick = openIncomePanel;
-  chatFoot.appendChild(btn);
+  btn.className = "btn"; btn.style.marginLeft = "4px"; btn.title = "Définir le revenu de ce mois";
+  btn.textContent = "💶 Revenu"; btn.onclick = openIncomePanel; chatFoot.appendChild(btn);
 
   const modal = document.createElement("div");
   modal.id = "incomeModal";
   Object.assign(modal.style, { position: "fixed", inset: "0", background: "rgba(0,0,0,.55)", backdropFilter: "blur(4px)", display: "none", zIndex: "9999" });
   const card = document.createElement("div");
-  Object.assign(card.style, {
-    maxWidth: "520px",
-    margin: "10vh auto",
-    background: "rgba(15,19,32,.95)",
-    border: "1px solid #1d2334",
-    borderRadius: "16px",
-    padding: "16px",
-  });
+  Object.assign(card.style, { maxWidth: "520px", margin: "10vh auto", background: "rgba(15,19,32,.95)", border: "1px solid #1d2334", borderRadius: "16px", padding: "16px" });
   const now = new Date();
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -887,58 +754,29 @@ function injectIncomePanel() {
     </div>
     <div id="incomeList" style="margin-top:12px"></div>
   `;
-  modal.appendChild(card);
-  document.body.appendChild(modal);
+  modal.appendChild(card); document.body.appendChild(modal);
 
   $("#incomeClose").onclick = () => (modal.style.display = "none");
   $("#incomeSave").onclick = () => {
-    const month = $("#inc_month").value;
-    const val = parseFloat($("#inc_value").value);
-    if (!month || isNaN(val)) {
-      alert("Mois et montant requis.");
-      return;
-    }
-    state.incomeByMonth[month] = val;
-    save();
-    render();
-    fillIncomeList();
-    pushPersona("ai", `Revenu défini pour ${month}: ${fmt(val)} ✅`);
-    modal.style.display = "none";
+    const month = $("#inc_month").value; const val = parseFloat($("#inc_value").value);
+    if (!month || isNaN(val)) { alert("Mois et montant requis."); return; }
+    state.incomeByMonth[month] = val; save(); render(); fillIncomeList(); pushPersona("ai", `Revenu défini pour ${month}: ${fmt(val)} ✅`); modal.style.display = "none";
   };
   $("#incomeDelete").onclick = () => {
-    const month = $("#inc_month").value;
-    if (!month) return;
-    delete state.incomeByMonth[month];
-    save();
-    render();
-    fillIncomeList();
-    pushPersona("ai", `Revenu supprimé pour ${month}.`);
-    modal.style.display = "none";
+    const month = $("#inc_month").value; if (!month) return;
+    delete state.incomeByMonth[month]; save(); render(); fillIncomeList(); pushPersona("ai", `Revenu supprimé pour ${month}.`); modal.style.display = "none";
   };
 
   function fillIncomeList() {
-    const wrap = $("#incomeList");
-    const keys = Object.keys(state.incomeByMonth).sort();
-    if (!keys.length) {
-      wrap.innerHTML = "";
-      return;
-    }
-    const rows = keys
-      .map(
-        (k) =>
-          `<div class="small" style="display:flex;justify-content:space-between;border-bottom:1px dashed #253; padding:4px 0">
-      <span>${k}</span><b>${fmt(state.incomeByMonth[k])}</b></div>`
-      )
-      .join("");
+    const wrap = $("#incomeList"); const keys = Object.keys(state.incomeByMonth).sort();
+    if (!keys.length) { wrap.innerHTML = ""; return; }
+    const rows = keys.map(k => `<div class="small" style="display:flex;justify-content:space-between;border-bottom:1px dashed #253; padding:4px 0">
+      <span>${k}</span><b>${fmt(state.incomeByMonth[k])}</b></div>`).join("");
     wrap.innerHTML = `<div class="small" style="margin-top:6px;opacity:.8">Revenus saisis :</div>${rows}`;
   }
 
-  function openIncomePanel() {
-    $("#inc_value").value = "";
-    fillIncomeList();
-    modal.style.display = "block";
-  }
+  function openIncomePanel() { $("#inc_value").value = ""; fillIncomeList(); modal.style.display = "block"; }
 }
 
-// ---
+// -----------------------------
 document.addEventListener("DOMContentLoaded", init);
