@@ -1,5 +1,3 @@
-// test
-// test watcher
 // BankAI app.js — v6 (Budget Brain ++, persona title, no income badge, SW cache-bust)
 console.log("BankAI app.js v6");
 
