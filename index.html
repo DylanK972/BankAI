@@ -8,79 +8,140 @@
   <link rel="icon" href="assets/icon-192.png" />
   <title>BankIA — Démo Web</title>
   <style>
-    /* ---- Design system (modern, minimal) ---- */
+    /* ---- Design system (futuriste, mobile-first) ---- */
     :root{
-      --bg:#0b0d14;           /* deep space */
-      --card:#0f1320f2;       /* glassy */
-      --stroke:#1d2334;       /* borders */
-      --text:#e9eef7;         /* primary text */
-      --muted:#9aa6bf;        /* secondary */
-      --accent:#6aa6ff;       /* electric blue */
-      --accent-2:#9f7bff;     /* violet */
+      --bg:#070a12;           /* deep night */
+      --panel:#0c1020e6;      /* glass panel */
+      --panel-2:#0a0f1de6;
+      --stroke:#1a2140;       /* borders */
+      --text:#eaf0ff;         /* primary text */
+      --muted:#9fb0d4;        /* secondary */
+      --accent:#67a3ff;       /* electric blue */
+      --accent-2:#a07bff;     /* violet */
       --ok:#22c55e;
       --danger:#ef4444;
-      --ring: 0 0 0 1px var(--stroke);
-      --shadow: 0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.02);
+      --glow: 0 0 24px rgba(100,140,255,.25);
+      --shadow: 0 12px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
       --rad: 18px;
+      --blur: 10px;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{
       margin:0;
-      background:
-        radial-gradient(1200px 800px at 80% -10%, rgba(88, 143, 255,.12), transparent 60%),
-        radial-gradient(900px 700px at -10% 10%, rgba(160, 120, 255,.12), transparent 50%),
-        var(--bg);
       color:var(--text);
-      font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+      font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
       letter-spacing:.2px;
+      background:
+        radial-gradient(1200px 800px at 85% -10%, rgba(88, 143, 255,.12), transparent 60%),
+        radial-gradient(1000px 700px at -10% 10%, rgba(160, 120, 255,.12), transparent 50%),
+        linear-gradient(180deg,#060911,#090c16 40%, #0a0d18);
     }
     a{color:inherit}
-    .container{max-width:1120px;margin:0 auto;padding:24px}
-    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+
+    /* ---- Layout ---- */
+    .container{max-width:1120px;margin:0 auto;padding:20px}
+    header{
+      display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
+      position:sticky; top:0; z-index:20;
+      backdrop-filter: blur(var(--blur));
+      background:linear-gradient(180deg, rgba(10,14,26,.7), rgba(10,14,26,.35));
+      border-bottom:1px solid #0f1430;
+      padding:10px 0 12px 0;
+    }
     .brand{display:flex;align-items:center;gap:10px}
-    .brand img{width:36px;height:36px;border-radius:12px}
-    .brand h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px}
-    .tag{font-size:12px;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke)}
-    .btn{appearance:none;border:1px solid var(--stroke);background:linear-gradient(180deg,#141a2b,#0e1423);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow)}
-    .btn.primary{border-color:transparent;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+    .brand img{width:34px;height:34px;border-radius:12px; box-shadow:var(--glow)}
+    .brand h1{font-size:18px;margin:0;font-weight:800;letter-spacing:.4px}
+    .tag{font-size:11px;color:var(--muted);padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke)}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .stack{display:flex;flex-direction:column;gap:12px}
+    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+
+    /* ---- Components ---- */
+    .card{
+      background:linear-gradient(180deg,var(--panel),var(--panel-2));
+      border:1px solid var(--stroke); border-radius:var(--rad); padding:16px;
+      box-shadow:var(--shadow); backdrop-filter: blur(var(--blur));
+      position:relative; overflow:hidden;
+    }
+    .card::after{
+      content:""; position:absolute; inset:0; pointer-events:none;
+      background: radial-gradient(600px 200px at 80% -20%, rgba(111,167,255,.08), transparent 60%),
+                  radial-gradient(400px 180px at -10% 120%, rgba(160,120,255,.06), transparent 60%);
+      mix-blend-mode:screen;
+    }
+    h2{margin:0 0 8px 0;font-size:16px;letter-spacing:.3px}
+    .small{font-size:12px;color:var(--muted)}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke);font-size:12px;color:var(--muted)}
+    .btn{
+      appearance:none;border:1px solid var(--stroke);
+      background:linear-gradient(180deg,#141a2b,#0e1423); color:var(--text);
+      padding:10px 14px;border-radius:12px;cursor:pointer;box-shadow:var(--shadow); transition:transform .08s ease;
+    }
+    .btn:active{transform:translateY(1px)}
+    .btn.primary{border-color:transparent;background:linear-gradient(90deg,var(--accent),var(--accent-2)); box-shadow:0 0 0 1px #1b2448 inset, 0 12px 40px rgba(110,140,255,.25)}
     .btn.ghost{background:transparent}
     .btn.ghost:hover{background:rgba(255,255,255,.04)}
-    input,select,textarea{background:rgba(9,12,20,.7);backdrop-filter: blur(6px); color:var(--text);border:1px solid var(--stroke);border-radius:12px;padding:10px}
-    input:focus,textarea:focus{outline:none;border-color:var(--accent)}
-    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--stroke);font-size:12px;color:var(--muted)}
-    .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
-    .card{background:var(--card);border:1px solid var(--stroke);border-radius:var(--rad);padding:16px;box-shadow:var(--shadow);backdrop-filter: blur(8px)}
-    .card h2{margin:0 0 10px 0;font-size:16px;letter-spacing:.2px}
-    .hero{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px}
-    .hero-title{font-size:22px;font-weight:700;margin:0}
-    .hero-sub{color:var(--muted);font-size:13px;margin:0}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    .balance{font-size:30px;font-weight:800;letter-spacing:.3px;display:flex;align-items:center;gap:8px}
-    .small{font-size:12px;color:var(--muted)}
+
+    input,select,textarea{
+      background:rgba(5,8,16,.65);backdrop-filter: blur(6px);
+      color:var(--text);border:1px solid var(--stroke);border-radius:12px;padding:10px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.02);
+    }
+    input:focus,textarea:focus{outline:none;border-color:var(--accent); box-shadow:0 0 0 3px rgba(103,163,255,.15)}
+
+    .balance{
+      font-size:30px;font-weight:900;letter-spacing:.3px;display:flex;align-items:center;gap:8px;
+      text-shadow: 0 6px 24px rgba(80,120,255,.18);
+    }
     .list{margin:0;padding:0;list-style:none}
-    .list li{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px dashed #1b2233}
+    .list li{
+      display:flex;justify-content:space-between;align-items:center;
+      padding:12px;border-bottom:1px dashed #1b2233
+    }
     .list li:last-child{border-bottom:none}
     .pos{color:var(--ok)} .neg{color:var(--danger)}
+
     .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}
-    .kpi .box{background:rgba(14,19,35,.7);border:1px solid var(--stroke);padding:10px;border-radius:12px;box-shadow:var(--shadow)}
+    @media (max-width:480px){ .kpi{grid-template-columns:1fr;}}
+    .kpi .box{
+      background:rgba(14,19,35,.7);border:1px solid var(--stroke);padding:12px;border-radius:12px;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:6px
+    }
+
     .progress{height:8px;background:#0d1220;border-radius:999px;overflow:hidden;border:1px solid var(--stroke)}
     .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%}
-    .chat{display:flex;flex-direction:column;gap:10px;height:420px}
-    .chat-box{flex:1;background:rgba(9,12,20,.7);border:1px solid var(--stroke);border-radius:12px;padding:12px;overflow:auto}
+
+    .chat{display:flex;flex-direction:column;gap:10px;height:460px}
+    @media (max-width:980px){.chat{height:420px}}
+    .chat-box{
+      flex:1;background:rgba(6,9,18,.7);border:1px solid var(--stroke);border-radius:14px;padding:12px;overflow:auto;
+      box-shadow: inset 0 10px 30px rgba(0,0,0,.25);
+    }
     .msg{max-width:85%;padding:10px 12px;border-radius:12px;margin:8px 0;white-space:pre-wrap}
-    .me{background:#16203a; margin-left:auto; border:1px solid #253657}
+    .me{background:#142042; margin-left:auto; border:1px solid #263a66}
     .ai{background:#0f172a;border:1px solid #1e2a44}
-    .foot{display:flex;gap:8px}
-    .warn{color:#fbbf24;font-size:12px}
+
+    .foot{
+      display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+      background:rgba(9,12,22,.5);border:1px solid var(--stroke);padding:8px;border-radius:12px;
+      backdrop-filter: blur(6px);
+    }
+
     .bud-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .box{background:rgba(14,19,35,.6);border:1px solid var(--stroke);padding:12px;border-radius:12px}
+
     footer{margin-top:18px;text-align:center;color:var(--muted);font-size:12px}
-    @media (max-width:980px){.grid{grid-template-columns:1fr} .chat{height:360px}}
+
+    /* ---- Dev-hidden (gardé en DOM pour éviter erreurs JS) ---- */
+    .dev-hidden{display:none !important}
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <header>
       <div class="brand">
         <img src="assets/icon-192.png" alt="BankIA" />
@@ -93,45 +154,59 @@
       </div>
     </header>
 
-    <section class="card">
-      <div class="hero">
-        <div>
-          <h2 class="hero-title">Ton compte intelligent, version démo</h2>
-          <p class="hero-sub">Teste l’UX et l’assistant IA sans serveur ni KYC. Tout reste en local.</p>
+    <!-- Connexion & mode IA -->
+    <section class="card" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between; align-items:center; gap:12px">
+        <div class="row" style="align-items:center; gap:8px">
+          <span class="pill">Mois <b id="monthTag" style="margin-left:6px; color:#fff"></b></span>
         </div>
         <div class="row">
           <select id="aiMode" class="btn">
             <option value="demo" selected>Démo IA (gratuit, local)</option>
             <option value="api">Clé API (optionnel)</option>
           </select>
-          <input id="apiKey" placeholder="Clé API (optionnel)" style="display:none;min-width:260px"/>
+          <input id="apiKey" placeholder="Clé API (optionnel)" style="display:none;min-width:240px"/>
         </div>
       </div>
-      <div class="row">
+
+      <div class="row" style="margin-top:10px">
         <input id="email" placeholder="Email (démo)" />
         <input id="name" placeholder="Nom" />
         <button class="btn primary" id="loginBtn">Entrer</button>
         <button class="btn" id="logoutBtn">Sortir</button>
       </div>
-      <p class="small" style="margin-top:8px">⚠️ Démo uniquement : données stockées en local sur ton appareil.</p>
+      <p class="small" style="margin-top:8px">⚠️ Démo uniquement : tes données restent en local sur ton appareil.</p>
     </section>
 
-    <div class="grid" style="margin-top:14px">
+    <div class="grid">
+      <!-- Comptes & Transactions -->
       <section class="card">
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
           <h2>Comptes & Transactions</h2>
-          <span class="pill" id="monthTag"></span>
+          <span class="pill">Mois courant</span>
         </div>
+
         <div class="balance" id="balanceView">€0.00</div>
+
         <div class="kpi">
-          <div class="box"><div class="small">Dépenses du mois</div><div id="spendMonth">€0</div></div>
-          <div class="box"><div class="small">Revenus du mois</div><div id="incomeMonth">€0</div></div>
-          <div class="box"><div class="small">Top catégorie</div><div id="topCat">–</div></div>
+          <div class="box">
+            <div class="small">Dépenses du mois</div>
+            <div id="spendMonth">€0</div>
+          </div>
+          <div class="box">
+            <div class="small">Revenus du mois</div>
+            <div id="incomeMonth">€0</div>
+          </div>
+          <div class="box">
+            <div class="small">Top catégorie</div>
+            <div id="topCat">–</div>
+          </div>
         </div>
 
         <ul class="list" id="txList"></ul>
 
-        <div class="row" style="margin-top:8px">
+        <!-- Contrôles manuels masqués (préservés pour app.js) -->
+        <div class="row dev-hidden" style="margin-top:8px">
           <input id="txLabel" placeholder="Libellé (ex: Carrefour)" />
           <input id="txAmount" type="number" step="0.01" placeholder="Montant (+/-)" />
           <select id="txCat">
@@ -141,30 +216,36 @@
           <button class="btn primary" id="addTx">Ajouter</button>
           <button class="btn" id="resetData">Réinitialiser</button>
         </div>
-        <div class="row" style="margin-top:6px">
+        <div class="row dev-hidden" style="margin-top:6px">
           <button class="btn ghost" id="exportBtn">Exporter JSON</button>
           <input type="file" id="importFile" style="display:none" accept="application/json" />
           <button class="btn ghost" id="importBtn">Importer JSON</button>
         </div>
       </section>
 
+      <!-- Assistant (nom dynamique) -->
       <section class="card">
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-          <h2>Coach IA</h2>
+          <h2 id="coachTitle">Coach IA</h2>
           <span class="small">Démo locale + option API</span>
         </div>
+
         <div class="chat">
           <div class="chat-box" id="chatBox"></div>
+
+          <!-- Dock d’actions (le JS va s’ancrer ici) -->
           <div class="foot">
             <input id="chatInput" placeholder="Ex: comment économiser 100€ ce mois-ci ?" style="flex:1"/>
             <button class="btn primary" id="sendChat">Envoyer</button>
           </div>
+
           <div class="progress"><i id="thinkingBar"></i></div>
-          <div class="warn" id="warn"></div>
+          <div class="small" id="warn" style="opacity:.85"></div>
         </div>
       </section>
     </div>
 
+    <!-- Budgets -->
     <section class="card" style="margin-top:14px">
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
         <h2>Budgets</h2>
