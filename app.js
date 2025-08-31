@@ -1,8 +1,10 @@
-// BankIA (clean UI) — Demo only, no backend. PWA-ready + Persona IA configurable
+// BankIA (clean UI) — Demo only, no backend. PWA-ready + Persona IA configurable + Budget Brain
 const $ = (sel) => document.querySelector(sel);
 const fmt = (n) => (n<0? "-" : "") + "€" + Math.abs(n).toFixed(2);
 const TODAY = new Date();
 const MONTH = TODAY.toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+const pad = (n)=> String(n).padStart(2,"0");
+const mkey = (d)=> `${d.getFullYear()}-${pad(d.getMonth()+1)}`; // ex: 2025-08
 
 // -----------------------------
 // STATE
@@ -13,6 +15,8 @@ const state = {
   budgets: { "Courses":300, "Sorties":150, "Transport":80, "Loyer":600, "Abonnements":50, "Autres":120 },
   aiMode: "demo",
   apiKey: "",
+  // Revenus planifiés/observés par mois: { "2025-01": 1700, ... }
+  incomeByMonth: {},
   // Persona IA totalement personnalisable
   aiPersona: {
     enabled: true,
@@ -21,18 +25,18 @@ const state = {
     gender: "femme",
     tone: "chaleureuse, claire et proactive",
     emoji: "💙",
-    avatar: "", // URL optionnelle (PNG/JPG). Si vide, on utilisera l’émoji/initiales.
-    bubbleHue: 225, // teinte (bleu/violet). 0-360
+    avatar: "", // URL optionnelle
+    bubbleHue: 225,
     greeting: "Bonjour ! Je suis {{name}}, {{role}}. Pose-moi ta première question et je te réponds avec des conseils concrets 😉",
     showTOS: true,
     tosText: "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
     showTOSOncePerSession: true,
     _tosShownThisSession: false,
-    typingSpeedMs: 18 // vitesse de frappe simulée pour l’IA (ms par caractère)
+    typingSpeedMs: 18
   }
 };
 
-const KEY = "bankia_demo_state_v1";
+const KEY = "bankia_demo_state_v2"; // bump pour éviter cache ancien
 function save(){ localStorage.setItem(KEY, JSON.stringify(state)); }
 function load(){
   const raw = localStorage.getItem(KEY);
@@ -67,8 +71,9 @@ function init(){
   $("#importBtn").onclick = ()=> $("#importFile").click();
   $("#importFile").onchange = importJSON;
 
-  // Ajoute bouton ⚙️ Persona + panneau de config (injecté en JS, pas besoin de modifier le HTML)
+  // UI injectée: Persona + Revenus par mois
   injectPersonaButtonAndPanel();
+  injectIncomePanel(); // 💶
 
   $("#sendChat").onclick = sendChat;
   $("#chatInput").addEventListener("keydown", e=>{ if (e.key === "Enter") sendChat(); });
@@ -87,7 +92,6 @@ function init(){
   if (state.tx.length === 0) seedDemo();
   render();
 
-  // Salutation Persona + Conditions si activées
   personaHelloAndTOS();
 }
 
@@ -150,32 +154,119 @@ function seedDemo(){
     {label:"Essence", amount:-35, cat:"Transport"},
   ];
   state.tx = sample.reverse().map(x=>({...x, id:crypto.randomUUID(), ts:Date.now()-Math.floor(Math.random()*20)*86400000})).reverse();
+  // Exemples de revenus saisis
+  const nowKey = mkey(new Date());
+  state.incomeByMonth[nowKey] = 1700; // démo : tu peux éditer via le panneau 💶
 }
 
 // -----------------------------
-// CALC & RENDER
+// CALC & DATA ACCESS
 // -----------------------------
-function calc(){
-  const monthStart=new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  let income=0, spend=0, byCat={};
-  for(const t of state.tx){
-    if (t.ts>=monthStart.getTime()){
-      if (t.amount>=0) income+=t.amount; else spend+=Math.abs(t.amount);
-      byCat[t.cat]=(byCat[t.cat]||0)+Math.abs(t.amount);
+function getMonthRange(d=new Date()){
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end = new Date(d.getFullYear(), d.getMonth()+1, 1);
+  return {start, end};
+}
+function sumTx(filterFn){ return state.tx.filter(filterFn).reduce((a,b)=>a+b.amount,0); }
+function monthTx(d=new Date()){
+  const {start,end}=getMonthRange(d);
+  return state.tx.filter(t=> t.ts>=start.getTime() && t.ts<end.getTime());
+}
+function incomeObservedFor(d=new Date()){
+  return monthTx(d).filter(t=> t.amount>0).reduce((a,b)=>a+b.amount,0);
+}
+function incomePlannedFor(d=new Date()){
+  return state.incomeByMonth[mkey(d)] || null;
+}
+function incomeFinalFor(d=new Date()){
+  const planned = incomePlannedFor(d);
+  const observed = incomeObservedFor(d);
+  if (planned!=null && planned>0) return planned;
+  return observed;
+}
+function spendFor(d=new Date()){
+  return Math.abs(monthTx(d).filter(t=> t.amount<0).reduce((a,b)=>a+b.amount,0));
+}
+function byCategoryFor(d=new Date()){
+  const res={};
+  for(const t of monthTx(d)){
+    if (t.amount<0) res[t.cat]=(res[t.cat]||0)+Math.abs(t.amount);
+  }
+  return res;
+}
+function topCategoryFor(d=new Date()){
+  const by=byCategoryFor(d); let top="–", val=0;
+  for(const [k,v] of Object.entries(by)){ if(v>val){ val=v; top=k; } }
+  return {top,val};
+}
+
+function subscriptionsHeuristics(){
+  // Détection simple: même label qui revient >=2 fois avec montants proches (abonnements)
+  const map = new Map();
+  for (const t of state.tx){
+    if (t.amount>=0) continue;
+    const key = t.label.toLowerCase().replace(/\s+/g,' ').trim();
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(t);
+  }
+  const subs=[];
+  for (const [label, arr] of map.entries()){
+    if (arr.length>=2){
+      // moyenne des montants (en absolu)
+      const avg = Math.abs(arr.reduce((a,b)=>a+b.amount,0))/arr.length;
+      const last = arr.sort((a,b)=>b.ts-a.ts)[0];
+      subs.push({label, avg: Math.round(avg*100)/100, lastDate:new Date(last.ts)});
     }
   }
-  let topCat="–",topVal=0;
-  for (const [k,v] of Object.entries(byCat)){ if(v>topVal){ topVal=v; topCat=k; } }
-  const balance = state.tx.reduce((a,b)=>a+b.amount,0);
-  return {income,spend,topCat,balance,byCat};
+  // tri par coût décroissant
+  subs.sort((a,b)=> b.avg-a.avg);
+  return subs.slice(0,8);
 }
 
+function forecastEndOfMonth(){
+  const {start}=getMonthRange(new Date());
+  const today = new Date();
+  const daysPassed = Math.max(1, Math.ceil((today - start)/86400000));
+  const spent = spendFor(today);
+  const avgDaily = spent / daysPassed;
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  const forecast = Math.round(avgDaily * daysInMonth * 100)/100;
+  return {avgDaily, forecast, daysPassed, daysInMonth};
+}
+
+function budget50_30_20(d=new Date()){
+  const income = incomeFinalFor(d);
+  if (!income || income<=0) return null;
+  const needs = income * 0.5;
+  const wants = income * 0.3;
+  const save  = income * 0.2;
+  return {
+    income,
+    needs: Math.round(needs*100)/100,
+    wants: Math.round(wants*100)/100,
+    save:  Math.round(save*100)/100
+  };
+}
+
+function balanceAll(){
+  return state.tx.reduce((a,b)=>a+b.amount,0);
+}
+
+// -----------------------------
+// RENDER
+// -----------------------------
 function render(){
-  const {income,spend,topCat,balance,byCat}=calc();
-  $("#balanceView").textContent = fmt(balance);
+  const d=new Date();
+  const incomeObserved = incomeObservedFor(d);
+  const incomePlanned = incomePlannedFor(d);
+  const income = incomeFinalFor(d);
+  const spend = spendFor(d);
+  const {top}=topCategoryFor(d);
+
+  $("#balanceView").textContent = fmt(balanceAll());
   $("#spendMonth").textContent = fmt(spend);
-  $("#incomeMonth").textContent = fmt(income);
-  $("#topCat").textContent = topCat;
+  $("#incomeMonth").textContent = fmt(income||incomeObserved||0);
+  $("#topCat").textContent = top;
 
   const ul=$("#txList"); ul.innerHTML="";
   for(const t of state.tx){
@@ -187,6 +278,7 @@ function render(){
   }
 
   const wrap=$("#budgets"); wrap.innerHTML="";
+  const byCat = byCategoryFor(d);
   for(const [cat,goal] of Object.entries(state.budgets)){
     const used = byCat[cat]||0; const pct=Math.min(100, Math.round((used/goal)*100));
     const card=document.createElement("div"); card.className="box"; card.style.minWidth="220px";
@@ -195,19 +287,28 @@ function render(){
       <div class="small">${fmt(used)} / ${fmt(goal)} (${pct}%)</div>`;
     wrap.appendChild(card);
   }
+
+  // Affiche un mini-statut revenu si saisi
+  const incomeBadge = $("#incomeBadge");
+  if (incomeBadge){
+    if (incomePlanned!=null){
+      incomeBadge.textContent = `Revenu planifié ${fmt(incomePlanned)} (${mkey(d)})`;
+      incomeBadge.style.display = "inline-block";
+    } else {
+      incomeBadge.style.display = "none";
+    }
+  }
 }
 
 // -----------------------------
 // CHAT & PERSONA
 // -----------------------------
 function pushPersona(role, text){
-  // Ajoute une bulle avec persona (avatar/nom) + style
-  const box = $("#chatBox");
-  const wrap = document.createElement("div");
-  wrap.className = "msg " + (role === "me" ? "me" : "ai");
+  const box=$("#chatBox");
+  const wrap=document.createElement("div");
+  wrap.className="msg " + (role==="me"?"me":"ai");
 
   if (role === "ai" && state.aiPersona.enabled){
-    // Habillage AI : avatar + nom + bulle colorée
     const head = document.createElement("div");
     head.style.display = "flex";
     head.style.alignItems = "center";
@@ -238,10 +339,8 @@ function pushPersona(role, text){
     name.style.fontSize = "12px";
     name.style.opacity = ".8";
 
-    head.appendChild(avatar);
-    head.appendChild(name);
+    head.appendChild(avatar); head.appendChild(name);
 
-    // Couleur bulle AI selon teinte
     const hue = Number(state.aiPersona.bubbleHue || 225);
     wrap.style.border = "1px solid hsla(" + hue + ", 50%, 40%, 0.45)";
     wrap.style.background = "linear-gradient(180deg, hsla("+hue+", 38%, 18%, .85), hsla("+hue+", 38%, 12%, .9))";
@@ -249,67 +348,44 @@ function pushPersona(role, text){
     wrap.appendChild(head);
   }
 
-  // Contenu
-  const body = document.createElement("div");
-  body.textContent = text;
+  const body=document.createElement("div");
+  body.textContent=text;
   wrap.appendChild(body);
 
   box.appendChild(wrap);
-  box.scrollTop = box.scrollHeight;
+  box.scrollTop=box.scrollHeight;
 }
 
 function typeLikeAI(text){
-  // Simule une frappe pour l’IA selon typingSpeed
   return new Promise(async (resolve)=>{
-    const box = $("#chatBox");
-    const wrap = document.createElement("div");
-    wrap.className = "msg ai";
+    const box=$("#chatBox");
+    const wrap=document.createElement("div");
+    wrap.className="msg ai";
     const hue = Number(state.aiPersona.bubbleHue || 225);
     wrap.style.border = "1px solid hsla(" + hue + ", 50%, 40%, 0.45)";
     wrap.style.background = "linear-gradient(180deg, hsla("+hue+", 38%, 18%, .85), hsla("+hue+", 38%, 12%, .9))";
 
-    const head = document.createElement("div");
-    head.style.display = "flex";
-    head.style.alignItems = "center";
-    head.style.gap = "8px";
-    head.style.marginBottom = "6px";
-
-    const avatar = document.createElement("div");
-    avatar.style.width = "22px";
-    avatar.style.height = "22px";
-    avatar.style.borderRadius = "999px";
-    avatar.style.flex = "0 0 auto";
-    avatar.style.border = "1px solid rgba(255,255,255,.15)";
-    avatar.style.background = "#0e1423";
+    const head=document.createElement("div");
+    head.style.display="flex"; head.style.alignItems="center"; head.style.gap="8px"; head.style.marginBottom="6px";
+    const avatar=document.createElement("div");
+    avatar.style.width="22px"; avatar.style.height="22px"; avatar.style.borderRadius="999px"; avatar.style.flex="0 0 auto";
+    avatar.style.border="1px solid rgba(255,255,255,.15)"; avatar.style.background="#0e1423";
     if (state.aiPersona.avatar){
       avatar.style.backgroundImage = `url('${state.aiPersona.avatar}')`;
       avatar.style.backgroundSize = "cover";
       avatar.style.backgroundPosition = "center";
     } else {
-      avatar.style.display = "flex";
-      avatar.style.alignItems = "center";
-      avatar.style.justifyContent = "center";
-      avatar.style.fontSize = "12px";
-      avatar.textContent = state.aiPersona.emoji || "🤖";
+      avatar.style.display="flex"; avatar.style.alignItems="center"; avatar.style.justifyContent="center"; avatar.style.fontSize="12px";
+      avatar.textContent=state.aiPersona.emoji || "🤖";
     }
-    const name = document.createElement("div");
-    name.textContent = state.aiPersona.name || "Assistant·e";
-    name.style.fontSize = "12px";
-    name.style.opacity = ".8";
-    head.appendChild(avatar); head.appendChild(name);
-    wrap.appendChild(head);
+    const name=document.createElement("div"); name.textContent=state.aiPersona.name||"Assistant·e"; name.style.fontSize="12px"; name.style.opacity=".8";
+    head.appendChild(avatar); head.appendChild(name); wrap.appendChild(head);
 
-    const body = document.createElement("div");
-    wrap.appendChild(body);
-    box.appendChild(wrap);
-    box.scrollTop = box.scrollHeight;
+    const body=document.createElement("div"); wrap.appendChild(body);
+    box.appendChild(wrap); box.scrollTop=box.scrollHeight;
 
-    const speed = Math.max(5, Number(state.aiPersona.typingSpeedMs||18));
-    for (let i=0;i<text.length;i++){
-      body.textContent += text[i];
-      await sleep(speed);
-      box.scrollTop = box.scrollHeight;
-    }
+    const speed=Math.max(5, Number(state.aiPersona.typingSpeedMs||18));
+    for(let i=0;i<text.length;i++){ body.textContent+=text[i]; await sleep(speed); box.scrollTop=box.scrollHeight; }
     resolve();
   });
 }
@@ -319,14 +395,14 @@ async function sendChat(){
   $("#chatInput").value=""; pushPersona("me", q);
   $("#thinkingBar").style.width="15%";
   try{
-    let ans = "";
+    let ans="";
     if (state.aiMode==="demo"){
-      ans = personaWrap(demoAI(q));
-      await sleep(350+Math.random()*450);
+      ans = personaWrap(brainAnswer(q));
+      await sleep(250+Math.random()*350);
       await typeLikeAI(ans);
     }else{
       if (!state.apiKey){
-        await typeLikeAI(personaWrap("Ajoute d'abord ta clé API, sinon reste en mode Démo."));
+        await typeLikeAI(personaWrap("Ajoute d'abord ta clé API, sinon reste en Démo."));
       } else {
         const raw = await remoteAI(personaPrompt(q), state.apiKey);
         ans = personaWrap(raw);
@@ -338,19 +414,15 @@ async function sendChat(){
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-
-// Persona : enrobe les réponses avec ton/style
-function personaWrap(text){
-  const p = state.aiPersona;
-  const signature = p.emoji ? ` ${p.emoji}` : "";
-  return text + signature;
-}
+function personaWrap(text){ const p=state.aiPersona; const signature=p.emoji?` ${p.emoji}`:""; return text+signature; }
 function personaPrompt(userMsg){
+  // Envoie un contexte riche au modèle (si API)
+  const d=new Date(); const by=byCategoryFor(d); const inc=incomeFinalFor(d)||0; const spent=spendFor(d);
+  const ctx = `Contexte: mois=${mkey(d)} revenu=${inc} dépenses=${spent} catégories=${JSON.stringify(by)}`;
   const p = state.aiPersona;
-  const personaSystem = `Tu es ${p.name}, ${p.role}. Genre: ${p.gender}. Ton: ${p.tone}. Reste positive, concise et utile.`;
-  return `${personaSystem}\nUtilisateur: ${userMsg}`;
+  const personaSystem = `Tu es ${p.name}, ${p.role}. Genre: ${p.gender}. Ton: ${p.tone}. Réponds concis, chiffré, actionnable.`;
+  return `${personaSystem}\n${ctx}\nQuestion: ${userMsg}`;
 }
-
 function personaHelloAndTOS(force=false){
   if (!state.aiPersona.enabled) return;
   const p = state.aiPersona;
@@ -365,32 +437,117 @@ function personaHelloAndTOS(force=false){
 }
 
 // -----------------------------
-// DEMO AI (règles locales)
+// BUDGET BRAIN — intents & réponses
 // -----------------------------
-function demoAI(q){
-  const {income,spend,topCat,byCat}=calc();
-  const spendPct = income>0 ? Math.round((spend/income)*100) : 0;
-  const tips=[];
-  if (spendPct>80) tips.push("Tu brûles >80% de tes revenus. Vise 70% max en réduisant 10% sur les 2 plus grosses catégories.");
-  if ((byCat["Sorties"]||0)>120) tips.push("Sorties >120€ : fixe un plafond hebdo (25€) et paye en cash.");
-  if ((byCat["Abonnements"]||0)>40) tips.push("Audit abonnements : supprime le superflu, négocie le reste.");
-  if ((byCat["Courses"]||0)>200) tips.push("Courses élevées : marques distributeur = ~30% d'économie.");
-  if ((byCat["Transport"]||0)>70) tips.push("Transport : regroupe tes trajets, surveille la pression des pneus.");
-  if (income - spend < 100) tips.push("Marge <100€ : micro-épargne auto de 3–5€/jour.");
-  const starter=`Analyse du mois : Dépenses ${fmt(spend)} (${spendPct}% des revenus) — Revenus ${fmt(income)} — Catégorie la plus gourmande : ${topCat}.`;
-  const generic="Actions rapides : 1) Budgets par catégorie, 2) Épargne après chaque revenu, 3) Saisie quotidienne (2 min).";
-
+function brainAnswer(q){
+  const d=new Date();
   const lower=q.toLowerCase();
-  if (lower.includes("où") && (lower.includes("dépense")||lower.includes("plus"))){
-    return starter + ` Tu dépenses surtout en **${topCat}**. Baisse de 15% cette catégorie et réalloue en épargne.`;
+
+  // Quick switches
+  const askIncomeSet = /(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)/.test(lower) || /changer.*revenu/.test(lower);
+  if (askIncomeSet) return "Clique sur le bouton 💶 Revenu à côté du chat pour saisir/mettre à jour le revenu de chaque mois. Je m’y base pour tous mes calculs.";
+
+  // Core numbers
+  const income = incomeFinalFor(d) || 0;
+  const incomeObs = incomeObservedFor(d) || 0;
+  const spent = spendFor(d) || 0;
+  const {top} = topCategoryFor(d);
+  const by = byCategoryFor(d);
+  const {avgDaily, forecast, daysPassed, daysInMonth} = forecastEndOfMonth();
+  const balance = balanceAll();
+
+  // Helpers
+  const safeToSpend = ()=>{
+    const fixed = (by["Loyer"]||0) + (by["Abonnements"]||0) + (by["Transport"]||0)*0.4; // approx part fixe transport
+    const already = spent;
+    const inc = income || incomeObs;
+    const left = Math.max(0, inc - fixed - already);
+    const perDay = left/Math.max(1, (daysInMonth - daysPassed));
+    return {left, perDay};
+  };
+
+  const propBudget = ()=>{
+    const base = budget50_30_20(d);
+    if (!base) return "J'ai besoin d'un revenu (observé ou saisi) pour proposer un budget précis. Clique sur 💶 Revenu pour l’indiquer.";
+    // Adapter “needs” avec loyer observé si connu
+    const loyer = by["Loyer"]||0;
+    const needs = Math.max(loyer, base.needs*0.5) + Math.max(0, (by["Courses"]||0)); // ancre sur dépenses déjà vues
+    const wants = Math.max(base.wants*0.5, (by["Sorties"]||0));
+    const save = Math.max(base.save, Math.max(0, (income - spent) * 0.4)); // pousser l’épargne s’il reste bcp
+    return `Proposition budget (adapté 50/30/20) sur revenu ${fmt(base.income)} :
+- Besoins (logement, factures, courses) ≈ ${fmt(needs)}  
+- Plaisir ≈ ${fmt(wants)}  
+- Épargne/objectif ≈ ${fmt(save)}  
+Ajuste: Loyer ${fmt(loyer)} • Abonnements ${fmt(by["Abonnements"]||0)} • Courses ${fmt(by["Courses"]||0)}.`;
+  };
+
+  const makeSavingsPlan = (target)=>{
+    // répartir sur reste de mois
+    const daysLeft = Math.max(1, daysInMonth - daysPassed);
+    const perDay = target/daysLeft;
+    const perWeek = target/4;
+    return `Plan épargne ${fmt(target)} : ~${fmt(perWeek)}/semaine (≈ ${fmt(perDay)}/jour) d'ici fin de mois.`;
+  };
+
+  const subs = subscriptionsHeuristics();
+
+  // INTENTS
+  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)){
+    return `Top catégorie ce mois-ci : **${top}** (${fmt(by[top]||0)}). Conseil : baisse de 10–15% ${top} et réalloue en épargne automatique.`;
   }
-  if (lower.includes("économis") || lower.includes("épargne") || lower.includes("100")){
-    return starter + ` Pour économiser **100€** ce mois-ci : -25€ Sorties, -35€ Courses, -40€ abonnements. ` + generic;
+
+  if (/(budget|plafond|enveloppe)/.test(lower)) return propBudget();
+
+  if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)){
+    const s = safeToSpend();
+    return `Reste à dépenser ce mois-ci ≈ ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour). Astuce : verrouille les achats “plaisir” à ${fmt(Math.max(5, s.perDay*0.6))}/jour pour garder de la marge.`;
   }
-  if (lower.includes("budget") || lower.includes("plafond")){
-    return starter + ` Proposition budget : Courses ${fmt(300)}, Sorties ${fmt(120)}, Transport ${fmt(70)}, Loyer ${fmt(600)}, Abonnements ${fmt(40)}, Autres ${fmt(90)}.`;
+
+  if (/(prévision|fin de mois|projection)/.test(lower)){
+    return `Prévision fin de mois : dépenses ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours). Pour tenir l’objectif, vise ≤ ${fmt(Math.max(0,(income||incomeObs)-forecast))} de reste.`;
   }
-  return starter + " " + (tips.length? tips.join(" ") : generic);
+
+  if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)){
+    const base = budget50_30_20(d);
+    if (!base) return "Dis-moi ton revenu du mois via 💶 Revenu et je calcule immédiatement une épargne ciblée (50/30/20 adapté).";
+    const target = Math.max(50, Math.round(base.save));
+    return `Capacité d’épargne conseillée ce mois-ci : ${fmt(target)} (règle 50/30/20). ${makeSavingsPlan(target)}`;
+  }
+
+  if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
+    if (!subs.length) return "Je n’ai pas détecté d’abonnements récurrents évidents. Ajoute des étiquettes claires (ex: 'Abonnement X').";
+    const lines = subs.slice(0,6).map(s=>`• ${s.label} ~ ${fmt(s.avg)}/mois (dernier: ${s.lastDate.toLocaleDateString('fr-FR')})`).join("\n");
+    return `Abonnements possibles repérés :\n${lines}\nAudit: supprime le superflu, regroupe sur un seul moyen de paiement, pose une alerte 48h avant renouvellement.`;
+  }
+
+  if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)){
+    // montants négatifs > 2x moyenne de leur catégorie
+    const by=byCategoryFor(d);
+    const avgByCat={}; for (const [k,v] of Object.entries(by)) avgByCat[k]=v/Math.max(1, monthTx(d).filter(t=>t.amount<0 && t.cat===k).length);
+    const anomalies = monthTx(d).filter(t=> t.amount<0 && Math.abs(t.amount) > (avgByCat[t.cat]||0)*2);
+    if (!anomalies.length) return "Rien d’inhabituel détecté sur ce mois. Surveille trotzdem les paiements internationaux ou doublons le même jour.";
+    const lines = anomalies.slice(0,5).map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString('fr-FR')}`).join("\n");
+    return `Alertes potentielles (montants 2× supérieurs à l’habitude) :\n${lines}\nVérifie et conteste si non autorisé.`;
+  }
+
+  if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)){
+    const room = Math.max(0, (income||incomeObs) - spent);
+    return `Stratégie dettes : consacre ${fmt(Math.max(20, room*0.6))}/mois au remboursement accéléré. Méthode **avalanche** (taux fort en priorité) → gagne des intérêts et libère du cashflow.`;
+  }
+
+  if (/(revenu|salaire|pay[eé]|gains).*(combien|pris|consid[ée]r|pris en compte)/.test(lower)){
+    const planned = incomePlannedFor(d);
+    return planned!=null
+      ? `Pour ${mkey(d)} j’utilise ton revenu saisi : ${fmt(planned)}. Tu peux l’ajuster via 💶 Revenu.`
+      : `Je n’ai pas de revenu saisi pour ${mkey(d)}. J’estime ${fmt(incomeObs)} depuis les entrées du mois. Tu peux le définir via 💶 Revenu.`;
+  }
+
+  // Fallback — résumé exécutif
+  const spendPct = (income||incomeObs)>0 ? Math.round((spent/(income||incomeObs))*100) : 0;
+  const budgetLine = budget50_30_20(d)
+    ? `Repère budget (50/30/20) : besoins ${fmt(budget50_30_20(d).needs)}, plaisir ${fmt(budget50_30_20(d).wants)}, épargne ${fmt(budget50_30_20(d).save)}.`
+    : `Ajoute ton revenu via 💶 pour une recommandation 50/30/20.`;
+  return `Résumé ${mkey(d)} — Revenus: ${fmt(income||incomeObs)}, Dépenses: ${fmt(spent)} (${spendPct}% des revenus). Catégorie la plus gourmande : ${top}. ${budgetLine}`;
 }
 
 // -----------------------------
@@ -418,37 +575,25 @@ async function remoteAI(qWithPersona, apiKey){
 // PERSONA UI (injectée)
 // -----------------------------
 function injectPersonaButtonAndPanel(){
-  const chatFoot = $(".foot"); // pied du module chat
-  if (!chatFoot) return;
+  const chatFoot = $(".foot"); if (!chatFoot) return;
 
   // Bouton ⚙️ Persona
   const gear = document.createElement("button");
-  gear.className = "btn";
-  gear.style.marginLeft = "4px";
-  gear.title = "Réglages Persona IA";
-  gear.textContent = "⚙️ Persona";
-  gear.onclick = openPersonaPanel;
-  chatFoot.appendChild(gear);
+  gear.className = "btn"; gear.style.marginLeft = "4px"; gear.title = "Réglages Persona IA"; gear.textContent = "⚙️ Persona";
+  gear.onclick = openPersonaPanel; chatFoot.appendChild(gear);
 
-  // Panel masqué (modal)
+  // Petit badge revenu courant
+  const badge = document.createElement("span");
+  badge.id="incomeBadge"; badge.className="small";
+  badge.style.marginLeft="8px"; badge.style.opacity=".75";
+  chatFoot.appendChild(badge);
+
+  // Modal Persona
   const modal = document.createElement("div");
   modal.id = "personaModal";
-  modal.style.position = "fixed";
-  modal.style.inset = "0";
-  modal.style.background = "rgba(0,0,0,.55)";
-  modal.style.backdropFilter = "blur(4px)";
-  modal.style.display = "none";
-  modal.style.zIndex = "9999";
-
+  Object.assign(modal.style,{position:"fixed",inset:"0",background:"rgba(0,0,0,.55)",backdropFilter:"blur(4px)",display:"none",zIndex:"9999"});
   const card = document.createElement("div");
-  card.style.maxWidth = "560px";
-  card.style.margin = "8vh auto";
-  card.style.background = "rgba(15,19,32,.95)";
-  card.style.border = "1px solid #1d2334";
-  card.style.borderRadius = "16px";
-  card.style.padding = "16px";
-  card.style.boxShadow = "0 10px 40px rgba(0,0,0,.5)";
-
+  Object.assign(card.style,{maxWidth:"560px",margin:"8vh auto",background:"rgba(15,19,32,.95)",border:"1px solid #1d2334",borderRadius:"16px",padding:"16px",boxShadow:"0 10px 40px rgba(0,0,0,.5)"});
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-weight:700">Persona IA — Réglages</div>
@@ -458,16 +603,12 @@ function injectPersonaButtonAndPanel(){
       <label>Nom<br><input id="p_name" /></label>
       <label>Rôle<br><input id="p_role" /></label>
       <label>Genre<br>
-        <select id="p_gender">
-          <option value="femme">Femme</option>
-          <option value="homme">Homme</option>
-          <option value="neutre">Neutre</option>
-        </select>
+        <select id="p_gender"><option value="femme">Femme</option><option value="homme">Homme</option><option value="neutre">Neutre</option></select>
       </label>
       <label>Émoji<br><input id="p_emoji" placeholder="💙" /></label>
       <label>Avatar (URL)<br><input id="p_avatar" placeholder="https://.../avatar.png" /></label>
       <label>Teinte bulle (0–360)<br><input id="p_hue" type="number" min="0" max="360" /></label>
-      <label style="grid-column:1/3">Ton (ex: chaleureuse, claire et proactive)<br><input id="p_tone" /></label>
+      <label style="grid-column:1/3">Ton<br><input id="p_tone" /></label>
       <label style="grid-column:1/3">Message d'accueil<br><input id="p_greet" /></label>
       <label style="grid-column:1/3">Conditions (TOS)<br><textarea id="p_tos" rows="3"></textarea></label>
       <label><input type="checkbox" id="p_enabled" /> Activer persona</label>
@@ -478,13 +619,9 @@ function injectPersonaButtonAndPanel(){
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="personaReset" class="btn">Réinitialiser</button>
       <button id="personaSave" class="btn primary">Enregistrer</button>
-    </div>
-  `;
+    </div>`;
+  modal.appendChild(card); document.body.appendChild(modal);
 
-  modal.appendChild(card);
-  document.body.appendChild(modal);
-
-  // Wire events
   $("#personaClose").onclick = ()=> modal.style.display="none";
   $("#personaSave").onclick = ()=>{
     const p = state.aiPersona;
@@ -507,28 +644,16 @@ function injectPersonaButtonAndPanel(){
   };
   $("#personaReset").onclick = ()=>{
     state.aiPersona = {
-      enabled: true,
-      name: "Camille",
-      role: "Assistante financière",
-      gender: "femme",
-      tone: "chaleureuse, claire et proactive",
-      emoji: "💙",
-      avatar: "",
-      bubbleHue: 225,
+      enabled: true, name: "Camille", role: "Assistante financière", gender: "femme",
+      tone: "chaleureuse, claire et proactive", emoji: "💙", avatar: "", bubbleHue: 225,
       greeting: "Bonjour ! Je suis {{name}}, {{role}}. Pose-moi ta première question et je te réponds avec des conseils concrets 😉",
-      showTOS: true,
-      tosText: "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
-      showTOSOncePerSession: true,
-      _tosShownThisSession: false,
-      typingSpeedMs: 18
+      showTOS: true, tosText: "Je suis une IA en démo. Mes réponses sont indicatives: vérifie avant décision. En poursuivant, tu acceptes ces conditions.",
+      showTOSOncePerSession: true, _tosShownThisSession: false, typingSpeedMs: 18
     };
-    save();
-    modal.style.display="none";
-    pushPersona("ai","Persona réinitialisée aux valeurs par défaut.");
+    save(); modal.style.display="none"; pushPersona("ai","Persona réinitialisée.");
   };
 
   function openPersonaPanel(){
-    // Hydrate les champs avec la state actuelle
     $("#p_name").value = state.aiPersona.name || "";
     $("#p_role").value = state.aiPersona.role || "";
     $("#p_gender").value = state.aiPersona.gender || "femme";
@@ -543,6 +668,72 @@ function injectPersonaButtonAndPanel(){
     $("#p_tos_once").checked = !!state.aiPersona.showTOSOncePerSession;
     $("#p_typing").value = Number(state.aiPersona.typingSpeedMs||18);
     modal.style.display = "block";
+  }
+}
+
+// -----------------------------
+// INCOME PANEL (injecté) — 💶 Revenu par mois
+// -----------------------------
+function injectIncomePanel(){
+  const chatFoot = $(".foot"); if (!chatFoot) return;
+
+  const btn = document.createElement("button");
+  btn.className="btn"; btn.style.marginLeft="4px"; btn.title="Définir le revenu de ce mois";
+  btn.textContent="💶 Revenu"; btn.onclick=openIncomePanel; chatFoot.appendChild(btn);
+
+  const modal = document.createElement("div");
+  modal.id="incomeModal";
+  Object.assign(modal.style,{position:"fixed",inset:"0",background:"rgba(0,0,0,.55)",backdropFilter:"blur(4px)",display:"none",zIndex:"9999"});
+  const card=document.createElement("div");
+  Object.assign(card.style,{maxWidth:"520px",margin:"10vh auto",background:"rgba(15,19,32,.95)",border:"1px solid #1d2334",borderRadius:"16px",padding:"16px"});
+  const now = new Date();
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:700">Revenu du mois</div>
+      <button id="incomeClose" class="btn">Fermer</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label>Mois<br>
+        <input id="inc_month" type="month" value="${now.getFullYear()}-${pad(now.getMonth()+1)}">
+      </label>
+      <label>Montant (€)<br>
+        <input id="inc_value" type="number" step="0.01" placeholder="1700">
+      </label>
+    </div>
+    <div class="small" style="opacity:.8;margin-top:6px">
+      Astuce : je priorise le revenu saisi ici par rapport aux entrées détectées dans les transactions.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+      <button id="incomeDelete" class="btn">Supprimer mois</button>
+      <button id="incomeSave" class="btn primary">Enregistrer</button>
+    </div>
+    <div id="incomeList" style="margin-top:12px"></div>
+  `;
+  modal.appendChild(card); document.body.appendChild(modal);
+
+  $("#incomeClose").onclick = ()=> modal.style.display="none";
+  $("#incomeSave").onclick = ()=>{
+    const month = $("#inc_month").value; const val=parseFloat($("#inc_value").value);
+    if (!month || isNaN(val)){ alert("Mois et montant requis."); return; }
+    state.incomeByMonth[month]=val; save(); render(); fillIncomeList(); pushPersona("ai",`Revenu défini pour ${month}: ${fmt(val)} ✅`); modal.style.display="none";
+  };
+  $("#incomeDelete").onclick = ()=>{
+    const month = $("#inc_month").value; if(!month) return;
+    delete state.incomeByMonth[month]; save(); render(); fillIncomeList(); pushPersona("ai",`Revenu supprimé pour ${month}.`); modal.style.display="none";
+  };
+
+  function fillIncomeList(){
+    const wrap=$("#incomeList"); const keys=Object.keys(state.incomeByMonth).sort();
+    if (!keys.length){ wrap.innerHTML=""; return; }
+    const rows = keys.map(k=>`<div class="small" style="display:flex;justify-content:space-between;border-bottom:1px dashed #253; padding:4px 0">
+      <span>${k}</span><b>${fmt(state.incomeByMonth[k])}</b></div>`).join("");
+    wrap.innerHTML = `<div class="small" style="margin-top:6px;opacity:.8">Revenus saisis :</div>${rows}`;
+  }
+
+  function openIncomePanel(){
+    $("#inc_value").value = "";
+    fillIncomeList();
+    modal.style.display="block";
   }
 }
 
