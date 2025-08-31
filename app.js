@@ -1,3 +1,4 @@
+console.log('BankAI app.js v4');
 // BankIA (clean UI) — Demo only, no backend. PWA-ready + Persona IA configurable + Budget Brain
 const $ = (sel) => document.querySelector(sel);
 const fmt = (n) => (n<0? "-" : "") + "€" + Math.abs(n).toFixed(2);
