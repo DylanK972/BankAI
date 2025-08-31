@@ -1,5 +1,5 @@
-// BankAI app.js — v8.1 (mobile feedback + barber-pole + reveals)
-console.log("BankAI app.js v8.1");
+// BankAI app.js — v9 (modal mobile fix + rôle auto + v8.1 UX)
+console.log("BankAI app.js v9");
 
 // --- small utils
 const $ = (sel) => document.querySelector(sel);
@@ -9,6 +9,13 @@ const MONTH = TODAY.toLocaleString("fr-FR", { month: "long", year: "numeric" });
 const pad = (n) => String(n).padStart(2, "0");
 const mkey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const BUILD_VERSION = "v10"; // bump pour SW
+
+// Rôle auto selon genre
+function roleByGender(g){
+  if (g === "femme")  return "Assistante financière";
+  if (g === "homme")  return "Assistant financier";
+  return "Assistant(e) financier(ère)";
+}
 
 // -----------------------------
 // STATE
@@ -24,7 +31,8 @@ const state = {
   aiPersona: {
     enabled: true,
     name: "Camille",
-    role: "Assistant(e) financier(ère)",
+    // rôle initial cohérent avec le genre de départ
+    role: "Assistante financière",
     gender: "femme",
     tone: "chaleureux",
     emoji: "💙",
@@ -47,30 +55,35 @@ function load(){
 // -----------------------------
 function init(){
   load();
-  $("#monthTag").textContent = MONTH;
-  $("#email").value = state.user?.email || "";
-  $("#name").value  = state.user?.name  || "";
-  $("#aiMode").value = state.aiMode || "demo";
-  $("#apiKey").style.display = state.aiMode === "api" ? "block" : "none";
-  $("#apiKey").value = state.apiKey || "";
+  // garde le rôle cohérent si ancien état sans rôle auto
+  state.aiPersona.role = roleByGender(state.aiPersona.gender || "neutre");
 
-  $("#loginBtn").onclick = login;
-  $("#logoutBtn").onclick = logout;
-  $("#aiMode").onchange = (e)=>{ state.aiMode = e.target.value; $("#apiKey").style.display = state.aiMode==="api"?"block":"none"; save(); };
-  $("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); };
+  $("#monthTag") && ($("#monthTag").textContent = MONTH);
+  $("#email") && ($("#email").value = state.user?.email || "");
+  $("#name") && ($("#name").value  = state.user?.name  || "");
+  $("#aiMode") && ($("#aiMode").value = state.aiMode || "demo");
+  if ($("#apiKey")){
+    $("#apiKey").style.display = state.aiMode === "api" ? "block" : "none";
+    $("#apiKey").value = state.apiKey || "";
+  }
 
-  $("#addTx").onclick = addTx;
-  $("#resetData").onclick = resetData;
-  $("#exportBtn").onclick = exportJSON;
-  $("#importBtn").onclick = ()=> $("#importFile").click();
-  $("#importFile").onchange = importJSON;
+  $("#loginBtn") && ($("#loginBtn").onclick = login);
+  $("#logoutBtn") && ($("#logoutBtn").onclick = logout);
+  $("#aiMode") && ($("#aiMode").onchange = (e)=>{ state.aiMode = e.target.value; $("#apiKey").style.display = state.aiMode==="api"?"block":"none"; save(); });
+  $("#apiKey") && ($("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); });
+
+  $("#addTx") && ($("#addTx").onclick = addTx);
+  $("#resetData") && ($("#resetData").onclick = resetData);
+  $("#exportBtn") && ($("#exportBtn").onclick = exportJSON);
+  $("#importBtn") && ($("#importBtn").onclick = ()=> $("#importFile").click());
+  $("#importFile") && ($("#importFile").onchange = importJSON);
 
   // UI injectée
   injectPersonaButtonAndPanel();
   injectIncomePanel(); // 💶
 
-  $("#sendChat").onclick = sendChat;
-  $("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); });
+  $("#sendChat") && ($("#sendChat").onclick = sendChat);
+  $("#chatInput") && ($("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); }));
 
   // PWA
   let deferredPrompt=null;
@@ -196,17 +209,19 @@ function balanceAll(){ return state.tx.reduce((a,b)=>a+b.amount,0); }
 // -----------------------------
 function render(){
   const d=new Date(); const incomeObserved=incomeObservedFor(d); const income=incomeFinalFor(d); const spend=spendFor(d); const {top}=topCategoryFor(d);
-  $("#balanceView").textContent = fmt(balanceAll());
-  $("#spendMonth").textContent  = fmt(spend);
-  $("#incomeMonth").textContent = fmt(income || incomeObserved || 0);
-  $("#topCat").textContent = top;
+  $("#balanceView") && ($("#balanceView").textContent = fmt(balanceAll()));
+  $("#spendMonth")  && ($("#spendMonth").textContent  = fmt(spend));
+  $("#incomeMonth") && ($("#incomeMonth").textContent = fmt(income || incomeObserved || 0));
+  $("#topCat")      && ($("#topCat").textContent = top);
 
-  const ul=$("#txList"); ul.innerHTML="";
-  for(const t of state.tx){
-    const li=document.createElement("li"); const left=document.createElement("div"); const right=document.createElement("div");
-    left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString("fr-FR")}</div>`;
-    right.innerHTML=`<span class="${t.amount<0?"neg":"pos"}">${fmt(t.amount)}</span>`;
-    li.appendChild(left); li.appendChild(right); ul.appendChild(li);
+  const ul=$("#txList"); if(ul){
+    ul.innerHTML="";
+    for(const t of state.tx){
+      const li=document.createElement("li"); const left=document.createElement("div"); const right=document.createElement("div");
+      left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString("fr-FR")}</div>`;
+      right.innerHTML=`<span class="${t.amount<0?"neg":"pos"}">${fmt(t.amount)}</span>`;
+      li.appendChild(left); li.appendChild(right); ul.appendChild(li);
+    }
   }
 
   const wrap=$("#budgets"); if(wrap){
@@ -226,7 +241,7 @@ function render(){
 // CHAT & PERSONA
 // -----------------------------
 function pushPersona(role,text){
-  const box=$("#chatBox");
+  const box=$("#chatBox"); if(!box) return;
   const wrap=document.createElement("div");
   wrap.className="msg "+(role==="me"?"me":"ai");
 
@@ -265,7 +280,7 @@ function pushPersona(role,text){
 
 function typeLikeAI(text){
   return new Promise(async (resolve)=>{
-    const box=$("#chatBox");
+    const box=$("#chatBox"); if(!box) return resolve();
     const wrap=document.createElement("div"); wrap.className="msg ai";
     const hue=Number(state.aiPersona.bubbleHue||225);
     wrap.style.border="1px solid hsla("+hue+", 50%, 40%, 0.45)";
@@ -291,9 +306,10 @@ function typeLikeAI(text){
 }
 
 async function sendChat(){
-  const q=$("#chatInput").value.trim(); if(!q) return;
-  $("#chatInput").value=""; pushPersona("me", q);
-  $("#thinkingBar").style.width="15%";
+  const input = $("#chatInput"); if(!input) return;
+  const q=input.value.trim(); if(!q) return;
+  input.value=""; pushPersona("me", q);
+  $("#thinkingBar") && ($("#thinkingBar").style.width="15%");
   setThinking(true);               // barber-pole ON
   try{
     let ans="";
@@ -305,7 +321,7 @@ async function sendChat(){
       else{ const raw=await remoteAI(personaPrompt(q), state.apiKey); ans=personaWrap(raw); await typeLikeAI(ans); }
     }
   }catch(e){ console.error(e); await typeLikeAI(personaWrap("Oups, petite erreur. Reste en mode Démo si besoin.")); }
-  finally{ $("#thinkingBar").style.width="0%"; setThinking(false); } // barber-pole OFF
+  finally{ $("#thinkingBar") && ($("#thinkingBar").style.width="0%"); setThinking(false); } // barber-pole OFF
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
@@ -323,7 +339,7 @@ function personaPrompt(userMsg){
 }
 function personaHello(force=false){
   if(!state.aiPersona.enabled) return;
-  if(force || $("#chatBox").childElementCount===0){
+  if(force || $("#chatBox")?.childElementCount===0){
     const p=state.aiPersona;
     const greet = `Hey ! Moi c'est ${p.name}, ton ${p.role}. En quoi je peux t'aider ? 💬`;
     pushPersona("ai", greet);
@@ -351,16 +367,223 @@ function brainAnswer(q){
     return { base, loyer, needs, wants, save:saveAmt };
   };
 
-  // ... (toutes tes branches de réponses — inchangées)
-  // ====> [je garde ici exactement tout ton brainAnswer complet de v8]
-  // Pour tenir, je n’ai modifié que l’entête / la fin. 
+  // Revenu saisi
+  if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)|changer.*revenu/.test(lower)){
+    return human([
+      "Pour que mes calculs soient nickel, ajoute ton revenu par mois.",
+      "➡️ Appuie sur **💶 Revenu** en bas, choisis le mois, saisis le montant, enregistre."
+    ]);
+  }
 
-  // [COPIE INTÉGRALE de ton brainAnswer v8 ici]
-  // --- début des cas ---
-  // (… tout le contenu que tu m’as fourni …)
-  // --- fin des cas ---
+  // Économie avec montant explicite
+  const amountInText = numberFromText(lower);
+  if (/(économis|epargne|épargn|mettre de c[oô]t[ée])/.test(lower) && amountInText!=null){
+    const target=amountInText; if(!usableIncome){ return human(["Si tu veux économiser un montant précis, j’ai besoin de ton revenu du mois.","➡️ Ajoute-le via **💶 Revenu**, puis je te sors un plan chifré."]); }
+    const order=[["Sorties",0.35],["Courses",0.25],["Abonnements",0.25],["Transport",0.15],["Autres",0.25]];
+    let remaining=target; const cuts=[];
+    for(const [cat,maxPct] of order){ const cur=by[cat]||0; if(cur<=0) continue; const possible=Math.min(cur*maxPct, remaining); if(possible>0){ cuts.push([cat, Math.round(possible*100)/100]); remaining=Math.max(0, remaining-possible); if(remaining===0) break; } }
+    const room=Math.max(0, usableIncome-spend);
+    if(remaining>0 && remaining>room*0.5){
+      const perMonth=Math.max(50, Math.round(target/2));
+      return human([
+        `Si tu veux économiser **${fmt(target)}** ce mois-ci, honnêtement c’est costaud.`,
+        `Plan réaliste :`,
+        `${cuts.length? "• " + cuts.map(([c,v])=>`Réduire **${c}** de **${fmt(v)}**`).join("\n• ") : "• Commence par Sorties/Abonnements"}`,
+        `• Étaler le reste sur **2 mois** (~${fmt(perMonth)}/mois)`,
+        "Bonus : revends 1–2 objets pour combler l’écart."
+      ]);
+    }
+    const perDay=target/daysLeft;
+    return human([
+      `Objectif **${fmt(target)}** : c’est jouable si tu es carré.`,
+      `${cuts.length? "• "+cuts.map(([c,v])=>`Coupe **${c}** : ${fmt(v)}`).join("\n• "):"• Vise d’abord les postes non essentiels"}`,
+      `• **Micro-épargne** : ~${fmt(perDay)}/jour jusqu’à la fin du mois`,
+      "Astuce : paiements plaisir en **cash**, désactive 1–2 abonnements peu utilisés."
+    ]);
+  }
 
-  // (je laisse tel quel votre fallback bilan + menu)
+  // Épargne sans montant
+  if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)){
+    const base=budget50_30_20(d); if(!base) return human(["Pour une cible d’épargne précise, dis-moi ton revenu du mois.","➡️ Ajoute-le via **💶 Revenu**, et je te propose un plan 50/30/20."]);
+    const target=Math.max(50, Math.round(base.save)); const perDay=target/daysLeft;
+    return human([`Capacité d’épargne conseillée : **${fmt(target)}** ce mois-ci.`,`Déclenche un virement **auto** le lendemain du salaire et vise ~**${fmt(perDay)}/jour**.`]);
+  }
+
+  // Fonds d’urgence
+  if (/(fonds|e?pargne).*(urgence|précaution)/.test(lower)){
+    const base=budget50_30_20(d); const target=base? Math.max(1000, Math.round((base.income||usableIncome)*3)) : 1000;
+    const start=Math.max(50, Math.round((usableIncome||0)*0.1));
+    return human([
+      "Fonds d’urgence = ton airbag financier. Objectif : **3 mois de dépenses** (ou au moins **1000 €** pour démarrer).",
+      `Pour toi, vise **${fmt(target)}**. Commence par **${fmt(start)}**/mois en automatique.`
+    ]);
+  }
+
+  // Budget 50/30/20
+  if (/(budget|plafond|enveloppe)/.test(lower)){
+    const b=base50(); if(!b) return human(["Je peux te faire un budget sur mesure, mais il me faut ton revenu.","➡️ Clique sur **💶 Revenu**."]);
+    return human([
+      `Budget conseillé (adapté 50/30/20) sur revenu **${fmt(b.base.income)}** :`,
+      `• **Besoins** ≈ ${fmt(b.needs)}\n• **Plaisir** ≈ ${fmt(b.wants)}\n• **Épargne/objectif** ≈ ${fmt(b.save)}`,
+      `Garde un œil sur : Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"]||0)} • Courses ${fmt(by["Courses"]||0)}.`
+    ]);
+  }
+
+  // Top catégorie
+  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)){
+    return human([`Actuellement, la catégorie qui pèse le plus : **${top}** (${fmt(by[top]||0)}).`,"Baisse **10–15%** et envoie la différence en épargne auto."]);
+  }
+
+  // Safe-to-spend
+  if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)){
+    const s=safeToSpend();
+    return human([`Reste à dépenser sereinement : **${fmt(s.left)}** (~${fmt(s.perDay)}/jour).`,`Fixe un cap plaisir ≈ ${fmt(Math.max(5, s.perDay*0.6))}/jour pour garder de la marge.`]);
+  }
+
+  // Projection fin de mois
+  if (/(prévision|fin de mois|projection)/.test(lower)){
+    return human([`Projection : dépenses ≈ **${fmt(forecast)}** (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`,`Vise ≥ **${fmt(Math.max(0,(usableIncome - forecast)))}** de reste.`]);
+  }
+
+  // Courses
+  if (/(courses|supermarch|aliment|bouffe|nourriture)/.test(lower)){
+    const budget=Math.max(80, Math.round((usableIncome||1200)*0.12));
+    return human([
+      `Objectif courses : **${fmt(budget)}**.`,
+      "Tips :\n• Va après avoir mangé\n• Liste + 5 repas réutilisables\n• MDD / vrac / congelé\n• Batch-cook dimanche\n• Cap panier (ex: 30 €) et repose 1 article si tu dépasses."
+    ]);
+  }
+
+  // Abonnements
+  if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
+    const subs=subscriptionsHeuristics();
+    if(!subs.length) return human(["Je ne vois pas d’abonnements clairs.","Renomme les lignes récurrentes en **“Abonnement X”** et je t’audite ça."]);
+    const lines=subs.slice(0,6).map(s=>`• ${s.label} ~ ${fmt(s.avg)}/mois (dernier: ${s.lastDate.toLocaleDateString("fr-FR")})`).join("\n");
+    return human(["Abonnements possibles :", lines, "Garde 3 services max, rappel 48 h avant renouvellement."]);
+  }
+
+  // Revenus irréguliers
+  if (/(irr[ée]guli|freelance|ind[ée]pendant|prime|bonus|variable)/.test(lower)){
+    return human([
+      "Revenus irréguliers :",
+      "• Compte **tampon** (1 mois de dépenses)\n• Verse-toi un **salaire fixe** depuis ce compte\n• Surplus : 50% épargne, 50% plaisir/dettes\n• Place les grosses charges juste après les grosses rentrées."
+    ]);
+  }
+
+  // Étudiant
+  if (/(étudiant|alternant|bourse|campus|logement étudiant)/.test(lower)){
+    return human([
+      "Budget étudiant :",
+      "• Loyer ≤ 35% revenus\n• Courses 100–160 €/mois\n• Transport étudiant / vélo\n• Abonnements : 2 max",
+      "Garde 200–300 € de tampon, auto-épargne 20–50 €/mois."
+    ]);
+  }
+
+  // Gros achat / vacances
+  if (/(vacances|voyage|pc|ordi|voiture|iphone|canap|meuble|d[ée]m[ée]nagement)/.test(lower)){
+    const goal=amountInText || Math.max(300, Math.round((usableIncome||1000)*0.6));
+    const monthly=Math.max(30, Math.round(goal/4));
+    return human([
+      `Plan “gros achat / vacances” : objectif **${fmt(goal)}**.`,
+      `• Cagnotte dédiée → **${fmt(monthly)}**/mois (auto)\n• Ajoute bonus/revente\n• Réserve tôt, vise -15 à -25% avec dates flexibles`
+    ]);
+  }
+
+  // Anomalies
+  if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)){
+    const byNow=byCategoryFor(d); const avgByCat={};
+    for(const [k,v] of Object.entries(byNow)){ const n=monthTx(d).filter(t=>t.amount<0 && t.cat===k).length; avgByCat[k]=v/Math.max(1,n); }
+    const anomalies=monthTx(d).filter(t=> t.amount<0 && Math.abs(t.amount)>(avgByCat[t.cat]||0)*2);
+    if(!anomalies.length) return human(["Rien d’inhabituel détecté.","Vérifie paiements internationaux / doublons le même jour."]);
+    const lines=anomalies.slice(0,5).map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString("fr-FR")}`).join("\n");
+    return human(["Alertes potentielles :", lines, "Vérifie et conteste si besoin."]);
+  }
+
+  // Dettes
+  if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)){
+    const room=Math.max(0, (usableIncome - spend));
+    return human([
+      "Stratégie dettes :",
+      `• Mets **${fmt(Math.max(20, room*0.6))}/mois**\n• Méthode **avalanche** (taux le + élevé)\n• Quand une dette tombe, **réaffecte** la mensualité à la suivante.`
+    ]);
+  }
+
+  // Frais bancaires / découvert
+  if (/(frais|agios|d[ée]couvert|commission d'intervention)/.test(lower)){
+    return human([
+      "Réduire les frais bancaires :",
+      "• Active l’**alerte solde bas**\n• Virement auto le **jour J** des charges fixes\n• Négocie un **geste commercial** si c’est ponctuel\n• Passe sur une carte à autorisation systématique pour éviter le découvert"
+    ]);
+  }
+
+  // Facture en retard
+  if (/(facture|loyer|edf|eau|t[lé]l[eé]phone).*(retard|en retard|impay[ée])/.test(lower)){
+    return human([
+      "Facture en retard :",
+      "• Appelle le service client → demande **échéancier**\n• Paye **une petite somme** tout de suite pour montrer ta bonne foi\n• Couper les dépenses non essentielles 15 jours"
+    ]);
+  }
+
+  // Gagner X / Side income
+  if (/(gagner|faire).*(argent|€|euros)|revenu compl[ée]mentaire|side hustle/.test(lower)){
+    const amountInText2 = numberFromText(lower);
+    const target = amountInText2 || 200;
+    return human([
+      `Idées pour **+${fmt(target)}** / mois :`,
+      "• Revente (Vinted/LeBonCoin) → tri garde/vente\n• Petites missions (Montage, Canva, traduction, livraison)\n• Micro-service local (lavage auto, courses, garde animaux)\n• Heures sup'/petits extras le WE",
+      "Règle : 50% épargne, 50% plaisir/dettes."
+    ]);
+  }
+
+  // CAF / APL (général)
+  if (/\b(caf|apl|aide au logement|prime d'activit[ée])\b/.test(lower)){
+    return human([
+      "Aides (général) :",
+      "• Vérifie ton éligibilité sur les **simulateurs officiels** (CAF, service-public)\n• Mets à jour tes revenus mensuels\n• Prévois 1–2 mois de délai avant premier versement"
+    ]);
+  }
+
+  // Impôts (basique)
+  if (/(imp[oô]ts|pr[ée]l[èe]vement|taux|d[ée]claration)/.test(lower)){
+    return human([
+      "Impôts – bases utiles :",
+      "• Vérifie ton **taux de prélèvement** dans ton espace\n• Si revenus baissent → demande une **mise à jour du taux**\n• Évite la régularisation salée : mensualisation = lissage"
+    ]);
+  }
+
+  // Chargeback / carte
+  if (/(opposition|carte|vol[ée]|perdue|d[ée]bit inconnu|chargeback|contester)/.test(lower)){
+    return human([
+      "Paiement suspect / carte :",
+      "• Fais **opposition** immédiate\n• Télécharge l’**attestation de contestation**\n• Suis le dossier, remboursement souvent sous 10–30 jours"
+    ]);
+  }
+
+  // Énergie / Inflation petites économies
+  if (/(facture d'?énergie|électricit|edf|eau|gaz|inflation)/.test(lower)){
+    return human([
+      "Baisser la facture :",
+      "• 19–20°C chauffage, coupe en journée\n• Lave-linge 30°C, sèche-linge moins\n• Minuteur/prises avec interrupteur\n• Compare les offres 1 fois/an"
+    ]);
+  }
+
+  // Crypto/Actions (rappel prudent)
+  if (/(crypto|bitcoin|bourse|actions|etf)/.test(lower)){
+    return human([
+      "Investissements (rappel prudent) :",
+      "• Priorité : **fonds d’urgence** + dettes chères\n• Si tu investis : DCA, long terme, montants que tu peux perdre\n• Diversifie, évite l’effet de levier"
+    ]);
+  }
+
+  // Revenus pris en compte ?
+  if (/(revenu|salaire|pay[eé]|gains).*(combien|pris|consid[ée]r|pris en compte)/.test(lower)){
+    const planned=incomePlannedFor(d);
+    return planned!=null
+      ? human([`Pour **${monthKey}**, j’utilise ton **revenu saisi** : ${fmt(planned)}.`,`Tu peux l’ajuster via **💶 Revenu**.`])
+      : human([`Je n’ai pas de revenu saisi pour **${monthKey}**.`,`J’estime **${fmt(incomeObs)}** à partir des entrées du mois. Tu peux le définir via **💶 Revenu**.`]);
+  }
+
+  // Fallback bilan + menu d’idées
   const spendPct = usableIncome>0 ? Math.round((spend/usableIncome)*100) : 0;
   const b = budget50_30_20(d);
   const budgetLine = b ? `Repère 50/30/20 : besoins ${fmt(b.needs)} • plaisir ${fmt(b.wants)} • épargne ${fmt(b.save)}.` : `Ajoute ton revenu via **💶 Revenu** pour une reco 50/30/20.`;
@@ -403,28 +626,28 @@ function getActionDock(){
 }
 
 // -----------------------------
-// PERSONA UI (identique v8)
+// PERSONA UI (rôle auto, grille responsive)
 function injectPersonaButtonAndPanel(){
   const dock = getActionDock();
 
   const btn = document.createElement("button");
-  btn.className="btn"; btn.style.marginLeft="4px"; btn.title="Personnaliser l'assistante";
+  btn.className="btn"; btn.style.marginLeft="4px"; btn.title="Personnaliser l'assistant";
   btn.textContent="🎨 Personnalise-moi";
   btn.onclick = openPersonaPanel;
   dock.appendChild(btn);
 
-  const modal=document.createElement("div"); modal.id="personaModal";
-  Object.assign(modal.style,{position:"fixed", inset:"0", background:"rgba(0,0,0,.55)", backdropFilter:"blur(4px)", display:"none", zIndex:"10000"});
+  const modal=document.createElement("div"); modal.id="personaModal"; modal.style.display="none";
+  document.body.appendChild(modal);
+
   const card=document.createElement("div");
-  Object.assign(card.style,{maxWidth:"560px", width:"min(560px, calc(100vw - 24px))", margin:"8vh auto", background:"rgba(15,19,32,.95)", border:"1px solid #1d2334", borderRadius:"16px", padding:"16px", boxShadow:"0 10px 40px rgba(0,0,0,.5)"});
+  card.className="card";
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-weight:700">Personnalise ton coach</div>
       <button id="personaClose" class="btn">Fermer</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="modal-grid">
       <label>Nom<br><input id="p_name" placeholder="Camille" /></label>
-      <label>Rôle<br><input id="p_role" placeholder="Assistant(e) financier(ère)" /></label>
       <label>Genre<br>
         <select id="p_gender">
           <option value="femme">Femme</option>
@@ -443,36 +666,40 @@ function injectPersonaButtonAndPanel(){
       </label>
       <label>Émoji<br><input id="p_emoji" placeholder="💙" /></label>
       <label>Teinte bulle (0–360)<br><input id="p_hue" type="number" min="0" max="360" /></label>
-      <label style="grid-column:1/2">Avatar (fichier depuis l'appareil)<br>
+
+      <label style="grid-column:1/-1">Avatar (fichier depuis l'appareil)<br>
         <input id="p_avatar_file" type="file" accept="image/*">
         <div id="p_avatar_preview" style="margin-top:6px; display:flex; align-items:center; gap:8px">
           <div style="width:36px;height:36px;border-radius:999px;border:1px solid #2b3150;background:#0e1423" id="p_avatar_circle"></div>
+          <small style="opacity:.8">Optionnel. L’image reste en local.</small>
         </div>
       </label>
-      <label style="grid-column:1/2">Vitesse frappe (ms/char)<br><input id="p_typing" type="number" min="5" max="100" /></label>
+
+      <label style="grid-column:1/-1">Vitesse frappe (ms/char)<br><input id="p_typing" type="number" min="5" max="100" /></label>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="personaReset" class="btn">Réinitialiser</button>
       <button id="personaSave" class="btn primary">Enregistrer</button>
     </div>`;
-  modal.appendChild(card); document.body.appendChild(modal);
+  modal.appendChild(card);
 
   $("#personaClose").onclick = ()=> modal.style.display="none";
   $("#personaSave").onclick = ()=>{
     const p=state.aiPersona;
-    p.name = $("#p_name").value.trim() || p.name;
-    p.role = $("#p_role").value.trim() || p.role;
+    p.name   = $("#p_name").value.trim() || p.name;
     p.gender = $("#p_gender").value;
-    p.tone = $("#p_tone").value;
-    p.emoji = $("#p_emoji").value || p.emoji;
+    p.role   = roleByGender(p.gender); // rôle auto
+    p.tone   = $("#p_tone").value || p.tone;
+    p.emoji  = $("#p_emoji").value || p.emoji;
     p.bubbleHue = Math.max(0, Math.min(360, Number($("#p_hue").value || p.bubbleHue)));
     p.typingSpeedMs = Math.max(5, Number($("#p_typing").value || p.typingSpeedMs));
     save(); updatePersonaTitle(); modal.style.display="none";
     pushPersona("ai","Personnalisation enregistrée ✅");
   };
   $("#personaReset").onclick = ()=>{
+    const g="femme";
     state.aiPersona = {
-      enabled:true, name:"Camille", role:"Assistant(e) financier(ère)", gender:"femme",
+      enabled:true, name:"Camille", gender:g, role:roleByGender(g),
       tone:"chaleureux", emoji:"💙", avatar:"", bubbleHue:225,
       greeting:"", typingSpeedMs:18
     };
@@ -497,8 +724,7 @@ function injectPersonaButtonAndPanel(){
 
   function openPersonaPanel(){
     $("#p_name").value  = state.aiPersona.name || "";
-    $("#p_role").value  = state.aiPersona.role || "";
-    $("#p_gender").value= state.aiPersona.gender || "femme";
+    $("#p_gender").value= state.aiPersona.gender || "neutre";
     $("#p_tone").value  = state.aiPersona.tone || "chaleureux";
     $("#p_emoji").value = state.aiPersona.emoji || "";
     $("#p_hue").value   = Number(state.aiPersona.bubbleHue || 225);
@@ -536,7 +762,7 @@ function injectIncomePanel(){
       <div style="font-weight:700">Revenu du mois</div>
       <button id="incomeClose" class="btn">Fermer</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div class="modal-grid">
       <label>Mois<br><input id="inc_month" type="month" value="${now.getFullYear()}-${pad(now.getMonth()+1)}"></label>
       <label>Montant (€)<br><input id="inc_value" type="number" inputmode="decimal" step="0.01" placeholder="1700"></label>
     </div>
