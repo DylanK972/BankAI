@@ -7,12 +7,14 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="assets/icon-192.png" />
   <title>BankIA — Démo Web</title>
+  <!-- 👉 charge le CSS -->
+  <link rel="stylesheet" href="styles.css?v=1.0" />
 </head>
 <body>
   <noscript>Cette démo nécessite JavaScript.</noscript>
 
   <div class="container">
-    <!-- Barre de marque (collante via CSS plus tard) -->
+    <!-- Header -->
     <header>
       <div class="brand" aria-label="Identité produit">
         <img src="assets/icon-192.png" alt="Logo BankIA" />
@@ -25,12 +27,11 @@
       </div>
     </header>
 
-    <!-- Bloc démo / login / clé API — MASQUÉ mais conservé pour app.js -->
+    <!-- Bloc démo / login / clé API — MASQUÉ mais conservé pour app.js (⚠️ pas de #monthTag ici) -->
     <section class="card dev-hidden" id="demoBlock" aria-hidden="true">
       <div class="row" style="justify-content:space-between;align-items:center;gap:12px">
         <div class="row" style="align-items:center;gap:8px">
-          <!-- doublon mois (caché), le vrai #monthTag visible est dans la carte Transactions -->
-          <span class="pill">Mois <b id="monthTag" style="margin-left:6px;color:#fff"></b></span>
+          <span class="pill">Mois <b class="small">(géré plus bas)</b></span>
         </div>
         <div class="row">
           <select id="aiMode" class="btn" aria-label="Mode IA">
@@ -50,24 +51,18 @@
     </section>
 
     <main class="grid" role="main">
-      <!-- COMPTE & MOUVEMENTS -->
+      <!-- Comptes & Transactions -->
       <section class="card card-hover" aria-labelledby="section-transactions">
         <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
           <div class="row" style="align-items:center;gap:10px">
             <h2 id="section-transactions">Comptes & Transactions</h2>
           </div>
-          <!-- mois dynamique pour l’utilisateur -->
-          <span class="pill" id="monthTagVisible" aria-live="polite" aria-atomic="true">
-            <!-- app.js remplit #monthTag ; on copie sa valeur dans CSS/JS si besoin.
-                 Si tu veux la même source, remplace l’id ici par id="monthTag" et retire
-                 celui du bloc masqué. -->
-          </span>
+          <!-- 👉 UNIQUE #monthTag, utilisé par app.js -->
+          <span class="pill" id="monthTag" aria-live="polite" aria-atomic="true"></span>
         </header>
 
-        <!-- Solde global -->
         <div class="balance" id="balanceView" aria-label="Solde global">€0.00</div>
 
-        <!-- KPIs mensuels -->
         <div class="kpi" role="region" aria-label="Indicateurs du mois">
           <div class="box" role="group" aria-label="Dépenses du mois">
             <div class="small">Dépenses du mois</div>
@@ -83,10 +78,9 @@
           </div>
         </div>
 
-        <!-- Historique des mouvements -->
         <ul class="list" id="txList" aria-label="Historique des transactions"></ul>
 
-        <!-- Contrôles manuels masqués (préservés pour app.js, ex. prototypage) -->
+        <!-- Contrôles manuels masqués (préservés pour app.js) -->
         <div class="row dev-hidden" style="margin-top:8px" aria-hidden="true">
           <input id="txLabel" placeholder="Libellé (ex: Carrefour)" />
           <input id="txAmount" type="number" step="0.01" placeholder="Montant (+/-)" inputmode="decimal" />
@@ -104,19 +98,16 @@
         </div>
       </section>
 
-      <!-- ASSISTANT FINANCIER -->
+      <!-- Assistant financier -->
       <section class="card card-hover" aria-labelledby="section-assistant">
         <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
-          <!-- Nom dynamique du bot (maj via updatePersonaTitle()) -->
           <h2 id="coachTitle">Coach IA</h2>
           <span class="small">Assistant financier personnel</span>
         </header>
 
         <div class="chat" aria-label="Chat avec l’assistant">
-          <!-- zone de messages (aria-live pour annoncer les nouvelles réponses) -->
           <div class="chat-box" id="chatBox" role="log" aria-live="polite" aria-relevant="additions"></div>
 
-          <!-- Champ + bouton en première ligne -->
           <div class="foot" data-dock="true">
             <label for="chatInput" class="sr-only">Votre message</label>
             <input id="chatInput"
@@ -124,17 +115,15 @@
                    style="flex:1"
                    autocomplete="off" />
             <button class="btn primary" id="sendChat" aria-label="Envoyer le message">Envoyer</button>
-            <!-- ⚠️ app.js ajoutera ici les boutons dock: 🎨 Personnalise-moi & 💶 Revenu -->
           </div>
 
-          <!-- Barre d’activité -->
           <div class="progress" aria-hidden="true"><i id="thinkingBar"></i></div>
           <div class="small" id="warn" style="opacity:.85" aria-live="polite"></div>
         </div>
       </section>
     </main>
 
-    <!-- BUDGETS -->
+    <!-- Budgets -->
     <section class="card card-hover" style="margin-top:14px" aria-labelledby="section-budgets">
       <header class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px">
         <h2 id="section-budgets">Budgets</h2>
@@ -147,24 +136,5 @@
   </div>
 
   <script src="app.js"></script>
-
-  <!-- Helper accessible (classe utilitaire invisible pour lecteurs d’écran, à styliser dans le CSS) -->
-  <span class="sr-only" aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap;">.</span>
-
-  <script>
-    /* petite sync pour afficher aussi le mois dans le badge visible (#monthTagVisible)
-       sans toucher à app.js. On copie le texte mis dans #monthTag si présent. */
-    document.addEventListener('DOMContentLoaded', () => {
-      const hiddenTag = document.querySelector('#demoBlock #monthTag');
-      const visibleTag = document.getElementById('monthTagVisible');
-      if (hiddenTag && visibleTag) {
-        const sync = () => { visibleTag.textContent = hiddenTag.textContent || ''; };
-        // première sync + resync légère après init()
-        setTimeout(sync, 0);
-        setTimeout(sync, 50);
-        setTimeout(sync, 200);
-      }
-    });
-  </script>
 </body>
 </html>
