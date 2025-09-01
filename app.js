@@ -1,10 +1,5 @@
-<script>
-// BankAI app.js — v9 (persona mobile fix + clearer tips + immobilier)
-// - Persona modal: no "Rôle", auto-set from gender, no horizontal scroll
-// - Answers: no ** around numbers, add "because" justifications
-// - New: immobilier (prix/apport/durée/taux/délai d’épargne)
-
-console.log("BankAI app.js v9");
+// BankAI app.js — v9.1 (fix no-<script>, persona mobile, clearer tips, immobilier)
+console.log("BankAI app.js v9.1");
 
 // --- small utils
 const $ = (sel) => document.querySelector(sel);
@@ -29,11 +24,11 @@ const state = {
   aiPersona: {
     enabled: true,
     name: "Camille",
-    role: "Assistante financière",
-    gender: "femme",            // femme | homme | neutre
-    tone: "chaleureux",         // chaleureux, direct, fun, pro, pédagogue
+    role: "Assistante financière",     // auto-dérivé du genre
+    gender: "femme",                   // femme | homme | neutre
+    tone: "chaleureux",
     emoji: "💙",
-    avatar: "",                 // Data URL locale
+    avatar: "",
     bubbleHue: 225,
     greeting: "",
     typingSpeedMs: 18,
@@ -52,9 +47,9 @@ function load(){
 // -----------------------------
 function init(){
   load();
-  const mt = $("#monthTag"); if(mt) mt.textContent = MONTH;
+  const mt=$("#monthTag"); if(mt) mt.textContent = MONTH;
 
-  // login/API (conservés pour le code mais masqués en UI)
+  // login/API (présents ou non selon ton HTML)
   $("#email") && ($("#email").value = state.user?.email || "");
   $("#name")  && ($("#name").value  = state.user?.name  || "");
   $("#aiMode") && ($("#aiMode").value = state.aiMode || "demo");
@@ -66,7 +61,6 @@ function init(){
   $("#aiMode") && ($("#aiMode").onchange = (e)=>{ state.aiMode = e.target.value; $("#apiKey").style.display = state.aiMode==="api"?"block":"none"; save(); });
   $("#apiKey") && ($("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); });
 
-  // data tools (gardés mais cachés)
   $("#addTx") && ($("#addTx").onclick = addTx);
   $("#resetData") && ($("#resetData").onclick = resetData);
   $("#exportBtn") && ($("#exportBtn").onclick = exportJSON);
@@ -77,8 +71,8 @@ function init(){
   injectPersonaButtonAndPanel();
   injectIncomePanel(); // 💶
 
-  $("#sendChat").onclick = sendChat;
-  $("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); });
+  $("#sendChat") && ($("#sendChat").onclick = sendChat);
+  $("#chatInput") && ($("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); }));
 
   // PWA
   let deferredPrompt=null;
@@ -88,7 +82,6 @@ function init(){
       if(!deferredPrompt) return; deferredPrompt.prompt(); deferredPrompt=null;
     });
   });
-
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js?v="+BUILD_VERSION);
 
   if (state.tx.length===0) seedDemo();
@@ -96,6 +89,7 @@ function init(){
   updatePersonaTitle();
   personaHello();
 
+  // ✨ effets mobile & reveals
   enhanceMobileUX();
 }
 
@@ -203,12 +197,13 @@ function balanceAll(){ return state.tx.reduce((a,b)=>a+b.amount,0); }
 // -----------------------------
 function render(){
   const d=new Date(); const incomeObserved=incomeObservedFor(d); const income=incomeFinalFor(d); const spend=spendFor(d); const {top}=topCategoryFor(d);
-  $("#balanceView").textContent = fmt(balanceAll());
-  $("#spendMonth").textContent  = fmt(spend);
-  $("#incomeMonth").textContent = fmt(income || incomeObserved || 0);
-  $("#topCat").textContent = top;
+  $("#balanceView") && ($("#balanceView").textContent = fmt(balanceAll()));
+  $("#spendMonth")  && ($("#spendMonth").textContent  = fmt(spend));
+  $("#incomeMonth") && ($("#incomeMonth").textContent = fmt(income || incomeObserved || 0));
+  $("#topCat") && ($("#topCat").textContent = top);
 
-  const ul=$("#txList"); if(ul){ ul.innerHTML="";
+  const ul=$("#txList");
+  if(ul){ ul.innerHTML="";
     for(const t of state.tx){
       const li=document.createElement("li"); const left=document.createElement("div"); const right=document.createElement("div");
       left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString("fr-FR")}</div>`;
@@ -234,7 +229,7 @@ function render(){
 // CHAT & PERSONA
 // -----------------------------
 function pushPersona(role,text){
-  const box=$("#chatBox");
+  const box=$("#chatBox"); if(!box) return;
   const wrap=document.createElement("div");
   wrap.className="msg "+(role==="me"?"me":"ai");
 
@@ -273,7 +268,7 @@ function pushPersona(role,text){
 
 function typeLikeAI(text){
   return new Promise(async (resolve)=>{
-    const box=$("#chatBox");
+    const box=$("#chatBox"); if(!box) return resolve();
     const wrap=document.createElement("div"); wrap.className="msg ai";
     const hue=Number(state.aiPersona.bubbleHue||225);
     wrap.style.border="1px solid hsla("+hue+", 50%, 40%, 0.45)";
@@ -299,9 +294,10 @@ function typeLikeAI(text){
 }
 
 async function sendChat(){
-  const q=$("#chatInput").value.trim(); if(!q) return;
+  const q=$("#chatInput")?.value.trim(); if(!q) return;
   $("#chatInput").value=""; pushPersona("me", q);
-  $("#thinkingBar").style.width="15%"; setThinking(true);
+  $("#thinkingBar") && ($("#thinkingBar").style.width="15%");
+  setThinking(true);
   try{
     let ans="";
     if(state.aiMode==="demo"){
@@ -312,13 +308,12 @@ async function sendChat(){
       else{ const raw=await remoteAI(personaPrompt(q), state.apiKey); ans=personaWrap(raw); await typeLikeAI(ans); }
     }
   }catch(e){ console.error(e); await typeLikeAI(personaWrap("Oups, petite erreur. Reste en mode Démo si besoin.")); }
-  finally{ $("#thinkingBar").style.width="0%"; setThinking(false); }
+  finally{ $("#thinkingBar") && ($("#thinkingBar").style.width="0%"); setThinking(false); }
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function personaWrap(text){
   const p=state.aiPersona;
-  // plus d’astérisques dans le rendu -> pas de markdown
   const toneSuffix = ({ chaleureux:" 😊", direct:" ✅", fun:" 😄", pro:" 📊", pédagogue:" 🧭" }[p.tone] || "");
   const signature = (p.emoji || "") + toneSuffix;
   return text + (signature ? " " + signature : "");
@@ -331,7 +326,7 @@ function personaPrompt(userMsg){
 }
 function personaHello(force=false){
   if(!state.aiPersona.enabled) return;
-  if(force || $("#chatBox").childElementCount===0){
+  if(force || $("#chatBox")?.childElementCount===0){
     const p=state.aiPersona;
     const greet = `Hey ! Moi c'est ${p.name}, ${p.role}. En quoi je peux t'aider ? 💬`;
     pushPersona("ai", greet);
@@ -339,32 +334,19 @@ function personaHello(force=false){
 }
 
 // -----------------------------
-// Intents (humains) — réponses plus claires
+// Intents (plus clairs + immobilier)
 // -----------------------------
 function numberFromText(str){
-  // accepte 1 200, 1.200, 1200, 1 200, 1200€ etc.
   const cleaned = str.replace(/\u202f/g," ").replace(",",".");
   const m = cleaned.match(/(\d+(?:[ .]\d{3})*(?:\.\d+)?)/);
   if(!m) return null;
   const n=parseFloat(m[1].replace(/[ .]/g,""));
   return isNaN(n)?null:n;
 }
-function percentFromText(str){
-  const m = str.match(/(\d{1,2}(?:\.\d+)?)\s*%/);
-  return m ? parseFloat(m[1]) : null;
-}
-function monthsFromText(str){
-  const m = str.match(/(\d{1,3})\s*(mois|months?)/i);
-  return m ? parseInt(m[1],10) : null;
-}
-function yearsFromText(str){
-  const m = str.match(/(\d{1,2})\s*(ans?|years?)/i);
-  return m ? parseInt(m[1],10) : null;
-}
-function rateFromText(str){
-  const m = str.match(/(\d+(?:\.\d+)?)\s*%/);
-  return m ? (parseFloat(m[1])/100) : null;
-}
+function percentFromText(str){ const m = str.match(/(\d{1,2}(?:\.\d+)?)\s*%/); return m ? parseFloat(m[1]) : null; }
+function monthsFromText(str){ const m = str.match(/(\d{1,3})\s*(mois|months?)/i); return m ? parseInt(m[1],10) : null; }
+function yearsFromText(str){ const m = str.match(/(\d{1,2})\s*(ans?|years?)/i); return m ? parseInt(m[1],10) : null; }
+function rateFromText(str){ const m = str.match(/(\d+(?:\.\d+)?)\s*%/); return m ? (parseFloat(m[1])/100) : null; }
 function human(lines){ return lines.filter(Boolean).join("\n\n"); }
 
 function brainAnswer(q){
@@ -382,41 +364,38 @@ function brainAnswer(q){
     return { base, loyer, needs, wants, save:saveAmt };
   };
 
-  // IMMOBILIER : "acheter maison/appartement ..."
+  // IMMOBILIER
   if (/(acheter|acquerir|acquérir).*(maison|appartement|appart|immobilier)/.test(lower) || /(crédit|pret|prêt).*(immobilier)/.test(lower)){
-    const price = numberFromText(lower) || 0; // prix s'il est dans la phrase
+    const price = numberFromText(lower) || 0;
     let apport = 0;
     const pct = percentFromText(lower);
     if (pct!=null && price>0) apport = Math.round(price * (pct/100));
     else {
-      // essaie d'isoler "apport 30000" / "apport de 30 000"
       const m = lower.match(/apport[^0-9]*(\d+(?:[ .]\d{3})*(?:\.\d+)?)/);
       if(m) apport = parseFloat(m[1].replace(/[ .]/g,""));
     }
     const years = yearsFromText(lower) || 25;
     const months = years*12;
-    const rate = rateFromText(lower) ?? 0.04; // 4% par défaut
-    const fraisPct = /neuf/.test(lower) ? 0.03 : 0.08; // neuf vs ancien (approx)
-    let frais = 0;
-    if (price>0) frais = Math.round(price * fraisPct);
+    const rate = rateFromText(lower) ?? 0.04; // 4%
+    const fraisPct = /neuf/.test(lower) ? 0.03 : 0.08;
+    let frais = price>0 ? Math.round(price * fraisPct) : 0;
 
     const totalNeeded = Math.max(0, apport + frais);
     const loanBase = Math.max(0, price - apport - frais);
     const r = rate/12;
     const mensualite = loanBase>0 && rate>=0 ? Math.round( (loanBase * r) / (1 - Math.pow(1+r, -months)) ) : 0;
 
-    const maxSafe = income ? Math.floor((income*0.35)) : null; // 35% des revenus du mois
+    const maxSafe = income ? Math.floor((income*0.35)) : null;
     const okDebt = (maxSafe!=null && mensualite>0) ? (mensualite <= maxSafe) : null;
 
-    // délai d’épargne s’il est mentionné
     const wishMonths = monthsFromText(lower) || null;
-    const toSave = totalNeeded; // on n’a pas l’épargne actuelle → simple
+    const toSave = totalNeeded;
     const perMonth = wishMonths ? Math.ceil(toSave / wishMonths) : null;
 
     const details = [
       price>0 ? `Prix visé : ${fmt(price)}` : null,
       `Apport pris en compte : ${fmt(apport)}${pct!=null ? " ("+pct+"%)" : ""}`,
-      `Frais estimés (notaire, dossier, garantie) : ~${fmt(frais)} (${Math.round(fraisPct*100)}%)`,
+      `Frais estimés (notaire, banque) : ~${fmt(frais)} (${Math.round(fraisPct*100)}%)`,
       `Montant à financer : ${fmt(loanBase)}`,
       mensualite>0 ? `Mensualité estimée sur ${years} ans à ${Math.round(rate*1000)/10}% : ~${fmt(mensualite)}` : null,
       (maxSafe!=null && mensualite>0) ? `Seuil conseillé (≤35% revenus) : ~${fmt(maxSafe)} → ${okDebt? "OK": "au-dessus, à revoir"}` : null
@@ -430,19 +409,19 @@ function brainAnswer(q){
       "Projet immobilier — estimation rapide",
       details,
       savingPlan,
-      "Pourquoi ces chiffres ?\n• Frais ~8% ancien / ~3% neuf (notaire + banque) ⇒ à prévoir en plus du prix.\n• Taux d’endettement recommandé ≤ 33-35% du revenu net ⇒ sécurise ta mensualité.\n• Mieux vaut garder 3 mois de dépenses en épargne de sécurité après l’achat."
+      "Pourquoi ces chiffres ?\n• Frais ~8% ancien / ~3% neuf ⇒ à ajouter au prix.\n• Endettement recommandé ≤ 33–35% du revenu ⇒ sécurise la mensualité.\n• Garde 3 mois de dépenses en épargne de sécurité après achat."
     ]);
   }
 
   // Revenu saisi
   if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)|changer.*revenu/.test(lower)){
     return human([
-      "Pour que mes calculs soient fiables, ajoute ton revenu du mois.",
-      "→ Appuie sur « 💶 Revenu » en bas, choisis le mois, saisis le montant puis enregistre."
+      "Pour des calculs fiables, ajoute ton revenu du mois.",
+      "→ Appuie sur « 💶 Revenu », choisis le mois, saisis le montant, enregistre."
     ]);
   }
 
-  // Économie avec montant explicite
+  // Épargne avec montant
   const amountInText = numberFromText(lower);
   if (/(économis|epargne|épargn|mettre de c[oô]t[ée])/.test(lower) && amountInText!=null){
     const target=amountInText; if(!usableIncome){ return human(["Pour un plan précis, j’ai besoin de ton revenu du mois.","→ Ajoute-le via « 💶 Revenu »."]); }
@@ -463,46 +442,46 @@ function brainAnswer(q){
   if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)){
     const base=budget50_30_20(d); if(!base) return human(["Pour une cible d’épargne personnalisée, indique ton revenu via « 💶 Revenu »."]);
     const target=Math.max(50, Math.round(base.save)); const perDay=target/daysLeft;
-    return human([`Capacité d’épargne conseillée ce mois-ci : ${fmt(target)}.`, `Déclenche un virement automatique le lendemain du salaire. Cible journalière : ~${fmt(perDay)}.`]);
+    return human([`Capacité d’épargne conseillée : ${fmt(target)} ce mois-ci.`, `Virement automatique le lendemain du salaire. Cible journalière : ~${fmt(perDay)}.`]);
   }
 
-  // Abonnements (avec “pourquoi”)
+  // Abonnements
   if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
     const subs=subscriptionsHeuristics();
-    if(!subs.length) return human(["Je ne vois pas d’abonnements clairs. Renomme tes lignes récurrentes en “Abonnement X” et je te refais l’audit."]);
+    if(!subs.length) return human(["Je ne vois pas d’abonnements clairs. Renomme les lignes récurrentes en “Abonnement X” et je t’audite ça."]);
     const lines=subs.slice(0,6).map(s=>`• ${s.label} ≈ ${fmt(s.avg)}/mois (dernier : ${s.lastDate.toLocaleDateString("fr-FR")})`).join("\n");
     return human([
       "Abonnements repérés :",
       lines,
-      "Plan en 3 étapes :\n1) Classe-les par usage réel (tu t’en es servi cette semaine ?). Si non → résilie ou pause.\n2) Regroupe les options (ex : un seul cloud, une seule plateforme vidéo à la fois).\n3) Fixe un plafond “récurrent” (ex : 15–25 €/mois) et remets à zéro chaque trimestre.\nPourquoi : les récurrents grignotent en silence ; 2–3 services max évitent les doublons."
+      "Plan en 3 étapes :\n1) Classe par usage réel (utilisé cette semaine ?). Si non → résilie/pause.\n2) Regroupe (un seul cloud, une plateforme vidéo à la fois).\n3) Fixe un plafond récurrent (ex : 15–25 €/mois)."
     ]);
   }
 
-  // Courses : tips avec raisons
+  // Courses
   if (/(courses|supermarch|aliment|bouffe|nourriture)/.test(lower)){
     const budget=Math.max(80, Math.round((usableIncome||1200)*0.12));
     return human([
       `Budget courses conseillé : ${fmt(budget)}.`,
-      "Tips utiles :\n• Va après avoir mangé (réduit les achats impulsifs)\n• Liste + 5 repas réutilisables (moins de gaspillage)\n• MDD/vrac/congelé (meilleur €/kg)\n• Batch-cook dimanche (moins de livraisons)\n• Cap panier (ex : 30 €) : si dépassé, repose 1 article"
+      "Pourquoi ces tips : manger avant (moins d’achats impulsifs), liste/repas réutilisables (moins de gaspillage), MDD/vrac/congelé (meilleur €/kg), batch-cook (moins de livraisons), cap panier (frein à l’extra)."
     ]);
   }
 
   // Safe-to-spend
   if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)){
     const s=safeToSpend();
-    return human([`Reste à dépenser sereinement : ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour).`, "Astuce : garde 40% pour l’imprévu, consomme max 60% en “plaisir”."]);
+    return human([`Reste à dépenser : ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour).`, "Garde 40% de marge imprévu, consomme 60% max en plaisir."]);
   }
 
   // Projection fin de mois
   if (/(prévision|fin de mois|projection)/.test(lower)){
-    return human([`Projection des dépenses : ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`, `Garde au moins ${fmt(Math.max(0,(usableIncome - forecast)))} de marge.`]);
+    return human([`Projection des dépenses : ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`, `Marge cible : ${fmt(Math.max(0,(usableIncome - forecast)))}.`]);
   }
 
   // Revenus irréguliers
   if (/(irr[ée]guli|freelance|ind[ée]pendant|prime|bonus|variable)/.test(lower)){
     return human([
-      "Revenus irréguliers — mode sécurité :",
-      "• Compte “tampon” = 1 mois de dépenses\n• Verse un “salaire” fixe depuis ce compte\n• Surplus : 50% épargne, 50% plaisir/dettes\n• Place grosses charges juste après grosses rentrées"
+      "Revenus irréguliers :",
+      "• Compte tampon (1 mois de dépenses) → verse-toi un salaire fixe\n• Surplus : 50% épargne / 50% plaisir-dettes\n• Place les grosses charges juste après les grosses rentrées"
     ]);
   }
 
@@ -510,12 +489,13 @@ function brainAnswer(q){
   if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)){
     const room=Math.max(0, (usableIncome - spend));
     return human([
-      "Méthode avalanche (rapide et éco d’intérêts) :",
-      `• Mets env. ${fmt(Math.max(20, Math.round(room*0.6)))} / mois sur les dettes\n• Priorise le taux le plus élevé\n• Quand une tombe, réaffecte sa mensualité à la suivante`
+      "Méthode avalanche :",
+      `• Alloue ~${fmt(Math.max(20, Math.round(room*0.6)))} / mois`,
+      "• Priorise la dette au taux le plus élevé\n• Quand une tombe, réaffecte la mensualité à la suivante"
     ]);
   }
 
-  // Frais bancaires / découvert
+  // Frais bancaires
   if (/(frais|agios|d[ée]couvert|commission d'intervention)/.test(lower)){
     return human([
       "Réduire les frais bancaires :",
@@ -535,15 +515,15 @@ function brainAnswer(q){
   if (/\b(caf|apl|aide au logement|prime d'activit[ée])\b/.test(lower)){
     return human([
       "Aides :",
-      "• Vérifie l’éligibilité sur les simulateurs officiels (CAF, service-public)\n• Mets à jour tes revenus mensuels\n• Compte 1–2 mois de délai pour le premier versement"
+      "• Vérifie l’éligibilité (simulateurs CAF / service-public)\n• Mets à jour tes revenus mensuels\n• Compte 1–2 mois de délai pour le premier versement"
     ]);
   }
 
   // Impôts
   if (/(imp[oô]ts|pr[ée]l[èe]vement|taux|d[ée]claration)/.test(lower)){
     return human([
-      "Impôts — check list :",
-      "• Vérifie ton taux de prélèvement\n• Revenu en baisse → demande une mise à jour du taux\n• Mensualisation = lissage, moins de rattrapage"
+      "Impôts — check rapide :",
+      "• Vérifie le taux de prélèvement\n• Revenu en baisse → demande la mise à jour\n• Mensualisation = lissage"
     ]);
   }
 
@@ -551,15 +531,15 @@ function brainAnswer(q){
   if (/(opposition|carte|vol[ée]|perdue|d[ée]bit inconnu|chargeback|contester)/.test(lower)){
     return human([
       "Paiement suspect :",
-      "• Opposition immédiate\n• Dépose l’attestation de contestation\n• Suivi dossier : remboursement souvent sous 10–30 jours"
+      "• Opposition immédiate\n• Attestation de contestation\n• Remboursement souvent sous 10–30 jours"
     ]);
   }
 
-  // Crypto/Actions (rappel)
+  // Crypto/Actions
   if (/(crypto|bitcoin|bourse|actions|etf)/.test(lower)){
     return human([
-      "Investissements — rappel prudent :",
-      "• Priorité : fonds d’urgence + dettes chères\n• Si tu investis : DCA, long terme, montants que tu peux perdre\n• Diversifie, pas d’effet de levier"
+      "Investissements — rappel :",
+      "• D’abord fonds d’urgence + dettes chères\n• Si tu investis : DCA, long terme, montants que tu peux perdre\n• Diversifie, pas d’effet de levier"
     ]);
   }
 
@@ -571,7 +551,7 @@ function brainAnswer(q){
     `Bilan ${monthKey}`,
     `• Revenus : ${fmt(usableIncome)}\n• Dépenses : ${fmt(spend)} (${spendPct}% des revenus)\n• Catégorie la plus gourmande : ${top}`,
     budgetLine,
-    "Je peux t’aider à optimiser : Courses, Sorties, Abonnements, Dettes, Frais bancaires, Facture en retard, Voyage, Fonds d’urgence, Impôts, Side income."
+    "Je peux t’aider sur : Courses, Sorties, Abonnements, Dettes, Frais bancaires, Facture en retard, Voyage, Fonds d’urgence, Impôts, Side income."
   ]);
 }
 
@@ -624,7 +604,7 @@ function injectPersonaButtonAndPanel(){
   const modal=document.createElement("div"); modal.id="personaModal";
   Object.assign(modal.style,{position:"fixed", inset:"0", background:"rgba(0,0,0,.55)", backdropFilter:"blur(6px)", display:"none", zIndex:"10000", padding:"max(8vh, calc(env(safe-area-inset-top) + 16px)) 12px 12px"});
   const card=document.createElement("div");
-  card.className="card"; // stylé par CSS global
+  card.className="card";
   card.style.maxWidth="560px"; card.style.width="min(560px, calc(100vw - 24px))"; card.style.margin="0 auto";
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -676,9 +656,8 @@ function injectPersonaButtonAndPanel(){
 
   $("#personaClose").onclick = ()=> modal.style.display="none";
   $("#p_gender").addEventListener("change", (e)=>{
-    // met à jour l’aperçu du rôle dans le titre du chat
-    const role = roleFromGender(e.target.value);
-    state.aiPersona.role = role;
+    state.aiPersona.gender = e.target.value;
+    state.aiPersona.role = roleFromGender(state.aiPersona.gender);
     save(); updatePersonaTitle();
   });
 
@@ -704,7 +683,6 @@ function injectPersonaButtonAndPanel(){
     save(); updatePersonaTitle(); modal.style.display="none"; pushPersona("ai","Persona réinitialisée.");
   };
 
-  // Avatar: preview + Data URL
   const fileInput = card.querySelector("#p_avatar_file");
   fileInput.onchange = ()=>{
     const f = fileInput.files?.[0]; if(!f) return;
@@ -842,4 +820,3 @@ function setThinking(on){
 
 // -----------------------------
 document.addEventListener("DOMContentLoaded", init);
-</script>
