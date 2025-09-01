@@ -1,4 +1,9 @@
-// BankAI app.js — v9 (modal mobile fix + rôle auto + v8.1 UX)
+<script>
+// BankAI app.js — v9 (persona mobile fix + clearer tips + immobilier)
+// - Persona modal: no "Rôle", auto-set from gender, no horizontal scroll
+// - Answers: no ** around numbers, add "because" justifications
+// - New: immobilier (prix/apport/durée/taux/délai d’épargne)
+
 console.log("BankAI app.js v9");
 
 // --- small utils
@@ -8,14 +13,7 @@ const TODAY = new Date();
 const MONTH = TODAY.toLocaleString("fr-FR", { month: "long", year: "numeric" });
 const pad = (n) => String(n).padStart(2, "0");
 const mkey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-const BUILD_VERSION = "v10"; // bump pour SW
-
-// Rôle auto selon genre
-function roleByGender(g){
-  if (g === "femme")  return "Assistante financière";
-  if (g === "homme")  return "Assistant financier";
-  return "Assistant(e) financier(ère)";
-}
+const BUILD_VERSION = "v11";
 
 // -----------------------------
 // STATE
@@ -31,12 +29,11 @@ const state = {
   aiPersona: {
     enabled: true,
     name: "Camille",
-    // rôle initial cohérent avec le genre de départ
     role: "Assistante financière",
-    gender: "femme",
-    tone: "chaleureux",
+    gender: "femme",            // femme | homme | neutre
+    tone: "chaleureux",         // chaleureux, direct, fun, pro, pédagogue
     emoji: "💙",
-    avatar: "",
+    avatar: "",                 // Data URL locale
     bubbleHue: 225,
     greeting: "",
     typingSpeedMs: 18,
@@ -55,23 +52,21 @@ function load(){
 // -----------------------------
 function init(){
   load();
-  // garde le rôle cohérent si ancien état sans rôle auto
-  state.aiPersona.role = roleByGender(state.aiPersona.gender || "neutre");
+  const mt = $("#monthTag"); if(mt) mt.textContent = MONTH;
 
-  $("#monthTag") && ($("#monthTag").textContent = MONTH);
+  // login/API (conservés pour le code mais masqués en UI)
   $("#email") && ($("#email").value = state.user?.email || "");
-  $("#name") && ($("#name").value  = state.user?.name  || "");
+  $("#name")  && ($("#name").value  = state.user?.name  || "");
   $("#aiMode") && ($("#aiMode").value = state.aiMode || "demo");
-  if ($("#apiKey")){
-    $("#apiKey").style.display = state.aiMode === "api" ? "block" : "none";
-    $("#apiKey").value = state.apiKey || "";
-  }
+  $("#apiKey") && ($("#apiKey").style.display = state.aiMode === "api" ? "block" : "none");
+  $("#apiKey") && ($("#apiKey").value = state.apiKey || "");
 
   $("#loginBtn") && ($("#loginBtn").onclick = login);
   $("#logoutBtn") && ($("#logoutBtn").onclick = logout);
   $("#aiMode") && ($("#aiMode").onchange = (e)=>{ state.aiMode = e.target.value; $("#apiKey").style.display = state.aiMode==="api"?"block":"none"; save(); });
   $("#apiKey") && ($("#apiKey").oninput = (e)=>{ state.apiKey = e.target.value; save(); });
 
+  // data tools (gardés mais cachés)
   $("#addTx") && ($("#addTx").onclick = addTx);
   $("#resetData") && ($("#resetData").onclick = resetData);
   $("#exportBtn") && ($("#exportBtn").onclick = exportJSON);
@@ -82,8 +77,8 @@ function init(){
   injectPersonaButtonAndPanel();
   injectIncomePanel(); // 💶
 
-  $("#sendChat") && ($("#sendChat").onclick = sendChat);
-  $("#chatInput") && ($("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); }));
+  $("#sendChat").onclick = sendChat;
+  $("#chatInput").addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); });
 
   // PWA
   let deferredPrompt=null;
@@ -101,7 +96,6 @@ function init(){
   updatePersonaTitle();
   personaHello();
 
-  // ✨ effets mobile & reveals
   enhanceMobileUX();
 }
 
@@ -147,7 +141,7 @@ function importJSON(evt){
   const file=evt.target.files?.[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=()=>{
-    try{ Object.assign(state, JSON.parse(reader.result)); save(); render(); pushPersona("ai","Import terminé ✅"); updatePersonaTitle();}
+    try{ Object.assign(state, JSON.parse(reader.result)); save(); render(); pushPersona("ai","Import terminé ✅"); updatePersonaTitle(); }
     catch(e){ alert("JSON invalide"); }
   };
   reader.readAsText(file);
@@ -209,13 +203,12 @@ function balanceAll(){ return state.tx.reduce((a,b)=>a+b.amount,0); }
 // -----------------------------
 function render(){
   const d=new Date(); const incomeObserved=incomeObservedFor(d); const income=incomeFinalFor(d); const spend=spendFor(d); const {top}=topCategoryFor(d);
-  $("#balanceView") && ($("#balanceView").textContent = fmt(balanceAll()));
-  $("#spendMonth")  && ($("#spendMonth").textContent  = fmt(spend));
-  $("#incomeMonth") && ($("#incomeMonth").textContent = fmt(income || incomeObserved || 0));
-  $("#topCat")      && ($("#topCat").textContent = top);
+  $("#balanceView").textContent = fmt(balanceAll());
+  $("#spendMonth").textContent  = fmt(spend);
+  $("#incomeMonth").textContent = fmt(income || incomeObserved || 0);
+  $("#topCat").textContent = top;
 
-  const ul=$("#txList"); if(ul){
-    ul.innerHTML="";
+  const ul=$("#txList"); if(ul){ ul.innerHTML="";
     for(const t of state.tx){
       const li=document.createElement("li"); const left=document.createElement("div"); const right=document.createElement("div");
       left.innerHTML=`<div>${t.label} <span class="small">· ${t.cat}</span></div><div class="small">${new Date(t.ts).toLocaleDateString("fr-FR")}</div>`;
@@ -241,7 +234,7 @@ function render(){
 // CHAT & PERSONA
 // -----------------------------
 function pushPersona(role,text){
-  const box=$("#chatBox"); if(!box) return;
+  const box=$("#chatBox");
   const wrap=document.createElement("div");
   wrap.className="msg "+(role==="me"?"me":"ai");
 
@@ -260,7 +253,7 @@ function pushPersona(role,text){
       avatar.textContent=state.aiPersona.emoji || "🤖";
     }
 
-    const name=document.createElement("div"); name.textContent=state.aiPersona.name || "Assistant·e"; name.style.fontSize="12px"; name.style.opacity=".8";
+    const name=document.createElement("div"); name.textContent=state.aiPersona.name || "Conseiller·ère"; name.style.fontSize="12px"; name.style.opacity=".8";
     head.appendChild(avatar); head.appendChild(name);
 
     const hue=Number(state.aiPersona.bubbleHue||225);
@@ -280,7 +273,7 @@ function pushPersona(role,text){
 
 function typeLikeAI(text){
   return new Promise(async (resolve)=>{
-    const box=$("#chatBox"); if(!box) return resolve();
+    const box=$("#chatBox");
     const wrap=document.createElement("div"); wrap.className="msg ai";
     const hue=Number(state.aiPersona.bubbleHue||225);
     wrap.style.border="1px solid hsla("+hue+", 50%, 40%, 0.45)";
@@ -293,7 +286,7 @@ function typeLikeAI(text){
     avatar.style.border="1px solid rgba(255,255,255,.15)"; avatar.style.background="#0e1423";
     if(state.aiPersona.avatar){ avatar.style.backgroundImage=`url('${state.aiPersona.avatar}')`; avatar.style.backgroundSize="cover"; avatar.style.backgroundPosition="center"; }
     else{ avatar.style.display="flex"; avatar.style.alignItems="center"; avatar.style.justifyContent="center"; avatar.style.fontSize="12px"; avatar.textContent=state.aiPersona.emoji || "🤖"; }
-    const name=document.createElement("div"); name.textContent=state.aiPersona.name||"Assistant·e"; name.style.fontSize="12px"; name.style.opacity=".8";
+    const name=document.createElement("div"); name.textContent=state.aiPersona.name||"Conseiller·ère"; name.style.fontSize="12px"; name.style.opacity=".8";
     head.appendChild(avatar); head.appendChild(name); wrap.appendChild(head);
 
     const body=document.createElement("div"); body.style.whiteSpace="pre-wrap"; wrap.appendChild(body);
@@ -306,11 +299,9 @@ function typeLikeAI(text){
 }
 
 async function sendChat(){
-  const input = $("#chatInput"); if(!input) return;
-  const q=input.value.trim(); if(!q) return;
-  input.value=""; pushPersona("me", q);
-  $("#thinkingBar") && ($("#thinkingBar").style.width="15%");
-  setThinking(true);               // barber-pole ON
+  const q=$("#chatInput").value.trim(); if(!q) return;
+  $("#chatInput").value=""; pushPersona("me", q);
+  $("#thinkingBar").style.width="15%"; setThinking(true);
   try{
     let ans="";
     if(state.aiMode==="demo"){
@@ -321,12 +312,13 @@ async function sendChat(){
       else{ const raw=await remoteAI(personaPrompt(q), state.apiKey); ans=personaWrap(raw); await typeLikeAI(ans); }
     }
   }catch(e){ console.error(e); await typeLikeAI(personaWrap("Oups, petite erreur. Reste en mode Démo si besoin.")); }
-  finally{ $("#thinkingBar") && ($("#thinkingBar").style.width="0%"); setThinking(false); } // barber-pole OFF
+  finally{ $("#thinkingBar").style.width="0%"; setThinking(false); }
 }
 
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
 function personaWrap(text){
   const p=state.aiPersona;
+  // plus d’astérisques dans le rendu -> pas de markdown
   const toneSuffix = ({ chaleureux:" 😊", direct:" ✅", fun:" 😄", pro:" 📊", pédagogue:" 🧭" }[p.tone] || "");
   const signature = (p.emoji || "") + toneSuffix;
   return text + (signature ? " " + signature : "");
@@ -339,18 +331,41 @@ function personaPrompt(userMsg){
 }
 function personaHello(force=false){
   if(!state.aiPersona.enabled) return;
-  if(force || $("#chatBox")?.childElementCount===0){
+  if(force || $("#chatBox").childElementCount===0){
     const p=state.aiPersona;
-    const greet = `Hey ! Moi c'est ${p.name}, ton ${p.role}. En quoi je peux t'aider ? 💬`;
+    const greet = `Hey ! Moi c'est ${p.name}, ${p.role}. En quoi je peux t'aider ? 💬`;
     pushPersona("ai", greet);
   }
 }
 
 // -----------------------------
-// Intents (humains)
+// Intents (humains) — réponses plus claires
 // -----------------------------
-function numberFromText(str){ const m=str.replace(",",".").match(/(\d[\d .]*)(?=\s*€?)/); if(!m) return null; const n=parseFloat(m[1].replace(/[\s.]/g,"")); return isNaN(n)?null:n; }
-function human(paragraphs){ return paragraphs.filter(Boolean).join("\n\n"); }
+function numberFromText(str){
+  // accepte 1 200, 1.200, 1200, 1 200, 1200€ etc.
+  const cleaned = str.replace(/\u202f/g," ").replace(",",".");
+  const m = cleaned.match(/(\d+(?:[ .]\d{3})*(?:\.\d+)?)/);
+  if(!m) return null;
+  const n=parseFloat(m[1].replace(/[ .]/g,""));
+  return isNaN(n)?null:n;
+}
+function percentFromText(str){
+  const m = str.match(/(\d{1,2}(?:\.\d+)?)\s*%/);
+  return m ? parseFloat(m[1]) : null;
+}
+function monthsFromText(str){
+  const m = str.match(/(\d{1,3})\s*(mois|months?)/i);
+  return m ? parseInt(m[1],10) : null;
+}
+function yearsFromText(str){
+  const m = str.match(/(\d{1,2})\s*(ans?|years?)/i);
+  return m ? parseInt(m[1],10) : null;
+}
+function rateFromText(str){
+  const m = str.match(/(\d+(?:\.\d+)?)\s*%/);
+  return m ? (parseFloat(m[1])/100) : null;
+}
+function human(lines){ return lines.filter(Boolean).join("\n\n"); }
 
 function brainAnswer(q){
   const d=new Date(); const lower=q.toLowerCase();
@@ -367,144 +382,136 @@ function brainAnswer(q){
     return { base, loyer, needs, wants, save:saveAmt };
   };
 
+  // IMMOBILIER : "acheter maison/appartement ..."
+  if (/(acheter|acquerir|acquérir).*(maison|appartement|appart|immobilier)/.test(lower) || /(crédit|pret|prêt).*(immobilier)/.test(lower)){
+    const price = numberFromText(lower) || 0; // prix s'il est dans la phrase
+    let apport = 0;
+    const pct = percentFromText(lower);
+    if (pct!=null && price>0) apport = Math.round(price * (pct/100));
+    else {
+      // essaie d'isoler "apport 30000" / "apport de 30 000"
+      const m = lower.match(/apport[^0-9]*(\d+(?:[ .]\d{3})*(?:\.\d+)?)/);
+      if(m) apport = parseFloat(m[1].replace(/[ .]/g,""));
+    }
+    const years = yearsFromText(lower) || 25;
+    const months = years*12;
+    const rate = rateFromText(lower) ?? 0.04; // 4% par défaut
+    const fraisPct = /neuf/.test(lower) ? 0.03 : 0.08; // neuf vs ancien (approx)
+    let frais = 0;
+    if (price>0) frais = Math.round(price * fraisPct);
+
+    const totalNeeded = Math.max(0, apport + frais);
+    const loanBase = Math.max(0, price - apport - frais);
+    const r = rate/12;
+    const mensualite = loanBase>0 && rate>=0 ? Math.round( (loanBase * r) / (1 - Math.pow(1+r, -months)) ) : 0;
+
+    const maxSafe = income ? Math.floor((income*0.35)) : null; // 35% des revenus du mois
+    const okDebt = (maxSafe!=null && mensualite>0) ? (mensualite <= maxSafe) : null;
+
+    // délai d’épargne s’il est mentionné
+    const wishMonths = monthsFromText(lower) || null;
+    const toSave = totalNeeded; // on n’a pas l’épargne actuelle → simple
+    const perMonth = wishMonths ? Math.ceil(toSave / wishMonths) : null;
+
+    const details = [
+      price>0 ? `Prix visé : ${fmt(price)}` : null,
+      `Apport pris en compte : ${fmt(apport)}${pct!=null ? " ("+pct+"%)" : ""}`,
+      `Frais estimés (notaire, dossier, garantie) : ~${fmt(frais)} (${Math.round(fraisPct*100)}%)`,
+      `Montant à financer : ${fmt(loanBase)}`,
+      mensualite>0 ? `Mensualité estimée sur ${years} ans à ${Math.round(rate*1000)/10}% : ~${fmt(mensualite)}` : null,
+      (maxSafe!=null && mensualite>0) ? `Seuil conseillé (≤35% revenus) : ~${fmt(maxSafe)} → ${okDebt? "OK": "au-dessus, à revoir"}` : null
+    ].filter(Boolean).join("\n");
+
+    const savingPlan = wishMonths
+      ? `Pour constituer apport + frais (~${fmt(toSave)}) en ${wishMonths} mois : viser ~${fmt(perMonth)}/mois.`
+      : `Astuce : fixe un délai (ex. 24 mois) → je te donne une cible d’épargne mensuelle.`;
+
+    return human([
+      "Projet immobilier — estimation rapide",
+      details,
+      savingPlan,
+      "Pourquoi ces chiffres ?\n• Frais ~8% ancien / ~3% neuf (notaire + banque) ⇒ à prévoir en plus du prix.\n• Taux d’endettement recommandé ≤ 33-35% du revenu net ⇒ sécurise ta mensualité.\n• Mieux vaut garder 3 mois de dépenses en épargne de sécurité après l’achat."
+    ]);
+  }
+
   // Revenu saisi
   if (/(revenu|salaire|pay[eé]|gains).*(saisi|déclar|entr|mettre)|changer.*revenu/.test(lower)){
     return human([
-      "Pour que mes calculs soient nickel, ajoute ton revenu par mois.",
-      "➡️ Appuie sur **💶 Revenu** en bas, choisis le mois, saisis le montant, enregistre."
+      "Pour que mes calculs soient fiables, ajoute ton revenu du mois.",
+      "→ Appuie sur « 💶 Revenu » en bas, choisis le mois, saisis le montant puis enregistre."
     ]);
   }
 
   // Économie avec montant explicite
   const amountInText = numberFromText(lower);
   if (/(économis|epargne|épargn|mettre de c[oô]t[ée])/.test(lower) && amountInText!=null){
-    const target=amountInText; if(!usableIncome){ return human(["Si tu veux économiser un montant précis, j’ai besoin de ton revenu du mois.","➡️ Ajoute-le via **💶 Revenu**, puis je te sors un plan chifré."]); }
+    const target=amountInText; if(!usableIncome){ return human(["Pour un plan précis, j’ai besoin de ton revenu du mois.","→ Ajoute-le via « 💶 Revenu »."]); }
     const order=[["Sorties",0.35],["Courses",0.25],["Abonnements",0.25],["Transport",0.15],["Autres",0.25]];
     let remaining=target; const cuts=[];
-    for(const [cat,maxPct] of order){ const cur=by[cat]||0; if(cur<=0) continue; const possible=Math.min(cur*maxPct, remaining); if(possible>0){ cuts.push([cat, Math.round(possible*100)/100]); remaining=Math.max(0, remaining-possible); if(remaining===0) break; } }
-    const room=Math.max(0, usableIncome-spend);
-    if(remaining>0 && remaining>room*0.5){
-      const perMonth=Math.max(50, Math.round(target/2));
-      return human([
-        `Si tu veux économiser **${fmt(target)}** ce mois-ci, honnêtement c’est costaud.`,
-        `Plan réaliste :`,
-        `${cuts.length? "• " + cuts.map(([c,v])=>`Réduire **${c}** de **${fmt(v)}**`).join("\n• ") : "• Commence par Sorties/Abonnements"}`,
-        `• Étaler le reste sur **2 mois** (~${fmt(perMonth)}/mois)`,
-        "Bonus : revends 1–2 objets pour combler l’écart."
-      ]);
-    }
+    for(const [cat,maxPct] of order){ const cur=by[cat]||0; if(cur<=0) continue; const possible=Math.min(cur*maxPct, remaining); if(possible>0){ cuts.push([cat, Math.round(possible*100)/100, cur]); remaining=Math.max(0, remaining-possible); if(remaining===0) break; } }
     const perDay=target/daysLeft;
+    const lines = cuts.map(([c,v,cur])=>`• ${c} : -${fmt(v)} (car tu dépenses ~${fmt(cur)} dessus)`);
     return human([
-      `Objectif **${fmt(target)}** : c’est jouable si tu es carré.`,
-      `${cuts.length? "• "+cuts.map(([c,v])=>`Coupe **${c}** : ${fmt(v)}`).join("\n• "):"• Vise d’abord les postes non essentiels"}`,
-      `• **Micro-épargne** : ~${fmt(perDay)}/jour jusqu’à la fin du mois`,
-      "Astuce : paiements plaisir en **cash**, désactive 1–2 abonnements peu utilisés."
+      `Objectif : mettre de côté ${fmt(target)} ce mois-ci.`,
+      lines.length ? lines.join("\n") : "• Vise d’abord les postes non essentiels (Sorties/Abonnements).",
+      `• Micro-épargne : ~${fmt(perDay)}/jour jusqu’à la fin du mois.`,
+      "Pourquoi : on coupe d’abord les dépenses variables (faciles à réduire) avant les charges fixes."
     ]);
   }
 
   // Épargne sans montant
   if (/(épargn|economis|mettre de c[oô]t[ée])/.test(lower)){
-    const base=budget50_30_20(d); if(!base) return human(["Pour une cible d’épargne précise, dis-moi ton revenu du mois.","➡️ Ajoute-le via **💶 Revenu**, et je te propose un plan 50/30/20."]);
+    const base=budget50_30_20(d); if(!base) return human(["Pour une cible d’épargne personnalisée, indique ton revenu via « 💶 Revenu »."]);
     const target=Math.max(50, Math.round(base.save)); const perDay=target/daysLeft;
-    return human([`Capacité d’épargne conseillée : **${fmt(target)}** ce mois-ci.`,`Déclenche un virement **auto** le lendemain du salaire et vise ~**${fmt(perDay)}/jour**.`]);
+    return human([`Capacité d’épargne conseillée ce mois-ci : ${fmt(target)}.`, `Déclenche un virement automatique le lendemain du salaire. Cible journalière : ~${fmt(perDay)}.`]);
   }
 
-  // Fonds d’urgence
-  if (/(fonds|e?pargne).*(urgence|précaution)/.test(lower)){
-    const base=budget50_30_20(d); const target=base? Math.max(1000, Math.round((base.income||usableIncome)*3)) : 1000;
-    const start=Math.max(50, Math.round((usableIncome||0)*0.1));
+  // Abonnements (avec “pourquoi”)
+  if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
+    const subs=subscriptionsHeuristics();
+    if(!subs.length) return human(["Je ne vois pas d’abonnements clairs. Renomme tes lignes récurrentes en “Abonnement X” et je te refais l’audit."]);
+    const lines=subs.slice(0,6).map(s=>`• ${s.label} ≈ ${fmt(s.avg)}/mois (dernier : ${s.lastDate.toLocaleDateString("fr-FR")})`).join("\n");
     return human([
-      "Fonds d’urgence = ton airbag financier. Objectif : **3 mois de dépenses** (ou au moins **1000 €** pour démarrer).",
-      `Pour toi, vise **${fmt(target)}**. Commence par **${fmt(start)}**/mois en automatique.`
+      "Abonnements repérés :",
+      lines,
+      "Plan en 3 étapes :\n1) Classe-les par usage réel (tu t’en es servi cette semaine ?). Si non → résilie ou pause.\n2) Regroupe les options (ex : un seul cloud, une seule plateforme vidéo à la fois).\n3) Fixe un plafond “récurrent” (ex : 15–25 €/mois) et remets à zéro chaque trimestre.\nPourquoi : les récurrents grignotent en silence ; 2–3 services max évitent les doublons."
     ]);
   }
 
-  // Budget 50/30/20
-  if (/(budget|plafond|enveloppe)/.test(lower)){
-    const b=base50(); if(!b) return human(["Je peux te faire un budget sur mesure, mais il me faut ton revenu.","➡️ Clique sur **💶 Revenu**."]);
+  // Courses : tips avec raisons
+  if (/(courses|supermarch|aliment|bouffe|nourriture)/.test(lower)){
+    const budget=Math.max(80, Math.round((usableIncome||1200)*0.12));
     return human([
-      `Budget conseillé (adapté 50/30/20) sur revenu **${fmt(b.base.income)}** :`,
-      `• **Besoins** ≈ ${fmt(b.needs)}\n• **Plaisir** ≈ ${fmt(b.wants)}\n• **Épargne/objectif** ≈ ${fmt(b.save)}`,
-      `Garde un œil sur : Loyer ${fmt(b.loyer)} • Abonnements ${fmt(by["Abonnements"]||0)} • Courses ${fmt(by["Courses"]||0)}.`
+      `Budget courses conseillé : ${fmt(budget)}.`,
+      "Tips utiles :\n• Va après avoir mangé (réduit les achats impulsifs)\n• Liste + 5 repas réutilisables (moins de gaspillage)\n• MDD/vrac/congelé (meilleur €/kg)\n• Batch-cook dimanche (moins de livraisons)\n• Cap panier (ex : 30 €) : si dépassé, repose 1 article"
     ]);
-  }
-
-  // Top catégorie
-  if (/(où|quelle).*(dépense|cat[ée]gorie).*(plus|max)/.test(lower)){
-    return human([`Actuellement, la catégorie qui pèse le plus : **${top}** (${fmt(by[top]||0)}).`,"Baisse **10–15%** et envoie la différence en épargne auto."]);
   }
 
   // Safe-to-spend
   if (/(reste|safe).*(vivre|dépenser)|safe[- ]to[- ]spend/.test(lower)){
     const s=safeToSpend();
-    return human([`Reste à dépenser sereinement : **${fmt(s.left)}** (~${fmt(s.perDay)}/jour).`,`Fixe un cap plaisir ≈ ${fmt(Math.max(5, s.perDay*0.6))}/jour pour garder de la marge.`]);
+    return human([`Reste à dépenser sereinement : ${fmt(s.left)} (≈ ${fmt(s.perDay)}/jour).`, "Astuce : garde 40% pour l’imprévu, consomme max 60% en “plaisir”."]);
   }
 
   // Projection fin de mois
   if (/(prévision|fin de mois|projection)/.test(lower)){
-    return human([`Projection : dépenses ≈ **${fmt(forecast)}** (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`,`Vise ≥ **${fmt(Math.max(0,(usableIncome - forecast)))}** de reste.`]);
-  }
-
-  // Courses
-  if (/(courses|supermarch|aliment|bouffe|nourriture)/.test(lower)){
-    const budget=Math.max(80, Math.round((usableIncome||1200)*0.12));
-    return human([
-      `Objectif courses : **${fmt(budget)}**.`,
-      "Tips :\n• Va après avoir mangé\n• Liste + 5 repas réutilisables\n• MDD / vrac / congelé\n• Batch-cook dimanche\n• Cap panier (ex: 30 €) et repose 1 article si tu dépasses."
-    ]);
-  }
-
-  // Abonnements
-  if (/abonnement|récurrent|spotify|netflix|prime|icloud/.test(lower)){
-    const subs=subscriptionsHeuristics();
-    if(!subs.length) return human(["Je ne vois pas d’abonnements clairs.","Renomme les lignes récurrentes en **“Abonnement X”** et je t’audite ça."]);
-    const lines=subs.slice(0,6).map(s=>`• ${s.label} ~ ${fmt(s.avg)}/mois (dernier: ${s.lastDate.toLocaleDateString("fr-FR")})`).join("\n");
-    return human(["Abonnements possibles :", lines, "Garde 3 services max, rappel 48 h avant renouvellement."]);
+    return human([`Projection des dépenses : ≈ ${fmt(forecast)} (moyenne ${fmt(avgDaily)}/jour, ${daysPassed}/${daysInMonth} jours).`, `Garde au moins ${fmt(Math.max(0,(usableIncome - forecast)))} de marge.`]);
   }
 
   // Revenus irréguliers
   if (/(irr[ée]guli|freelance|ind[ée]pendant|prime|bonus|variable)/.test(lower)){
     return human([
-      "Revenus irréguliers :",
-      "• Compte **tampon** (1 mois de dépenses)\n• Verse-toi un **salaire fixe** depuis ce compte\n• Surplus : 50% épargne, 50% plaisir/dettes\n• Place les grosses charges juste après les grosses rentrées."
+      "Revenus irréguliers — mode sécurité :",
+      "• Compte “tampon” = 1 mois de dépenses\n• Verse un “salaire” fixe depuis ce compte\n• Surplus : 50% épargne, 50% plaisir/dettes\n• Place grosses charges juste après grosses rentrées"
     ]);
-  }
-
-  // Étudiant
-  if (/(étudiant|alternant|bourse|campus|logement étudiant)/.test(lower)){
-    return human([
-      "Budget étudiant :",
-      "• Loyer ≤ 35% revenus\n• Courses 100–160 €/mois\n• Transport étudiant / vélo\n• Abonnements : 2 max",
-      "Garde 200–300 € de tampon, auto-épargne 20–50 €/mois."
-    ]);
-  }
-
-  // Gros achat / vacances
-  if (/(vacances|voyage|pc|ordi|voiture|iphone|canap|meuble|d[ée]m[ée]nagement)/.test(lower)){
-    const goal=amountInText || Math.max(300, Math.round((usableIncome||1000)*0.6));
-    const monthly=Math.max(30, Math.round(goal/4));
-    return human([
-      `Plan “gros achat / vacances” : objectif **${fmt(goal)}**.`,
-      `• Cagnotte dédiée → **${fmt(monthly)}**/mois (auto)\n• Ajoute bonus/revente\n• Réserve tôt, vise -15 à -25% avec dates flexibles`
-    ]);
-  }
-
-  // Anomalies
-  if (/(anomal|inhabituel|fraud|bizarre)/.test(lower)){
-    const byNow=byCategoryFor(d); const avgByCat={};
-    for(const [k,v] of Object.entries(byNow)){ const n=monthTx(d).filter(t=>t.amount<0 && t.cat===k).length; avgByCat[k]=v/Math.max(1,n); }
-    const anomalies=monthTx(d).filter(t=> t.amount<0 && Math.abs(t.amount)>(avgByCat[t.cat]||0)*2);
-    if(!anomalies.length) return human(["Rien d’inhabituel détecté.","Vérifie paiements internationaux / doublons le même jour."]);
-    const lines=anomalies.slice(0,5).map(t=>`• ${t.label} (${t.cat}) ${fmt(t.amount)} le ${new Date(t.ts).toLocaleDateString("fr-FR")}`).join("\n");
-    return human(["Alertes potentielles :", lines, "Vérifie et conteste si besoin."]);
   }
 
   // Dettes
   if (/(dette|crédit|rembourser|intér[êe]ts)/.test(lower)){
     const room=Math.max(0, (usableIncome - spend));
     return human([
-      "Stratégie dettes :",
-      `• Mets **${fmt(Math.max(20, room*0.6))}/mois**\n• Méthode **avalanche** (taux le + élevé)\n• Quand une dette tombe, **réaffecte** la mensualité à la suivante.`
+      "Méthode avalanche (rapide et éco d’intérêts) :",
+      `• Mets env. ${fmt(Math.max(20, Math.round(room*0.6)))} / mois sur les dettes\n• Priorise le taux le plus élevé\n• Quand une tombe, réaffecte sa mensualité à la suivante`
     ]);
   }
 
@@ -512,7 +519,7 @@ function brainAnswer(q){
   if (/(frais|agios|d[ée]couvert|commission d'intervention)/.test(lower)){
     return human([
       "Réduire les frais bancaires :",
-      "• Active l’**alerte solde bas**\n• Virement auto le **jour J** des charges fixes\n• Négocie un **geste commercial** si c’est ponctuel\n• Passe sur une carte à autorisation systématique pour éviter le découvert"
+      "• Alerte solde bas + virement auto le jour J des charges fixes\n• Si ponctuel : demande un geste commercial\n• Carte à autorisation systématique pour éviter le découvert"
     ]);
   }
 
@@ -520,78 +527,51 @@ function brainAnswer(q){
   if (/(facture|loyer|edf|eau|t[lé]l[eé]phone).*(retard|en retard|impay[ée])/.test(lower)){
     return human([
       "Facture en retard :",
-      "• Appelle le service client → demande **échéancier**\n• Paye **une petite somme** tout de suite pour montrer ta bonne foi\n• Couper les dépenses non essentielles 15 jours"
+      "• Appelle → demande un échéancier\n• Paie un petit montant tout de suite (bonne foi)\n• Coupe les dépenses non essentielles 15 jours"
     ]);
   }
 
-  // Gagner X / Side income
-  if (/(gagner|faire).*(argent|€|euros)|revenu compl[ée]mentaire|side hustle/.test(lower)){
-    const amountInText2 = numberFromText(lower);
-    const target = amountInText2 || 200;
-    return human([
-      `Idées pour **+${fmt(target)}** / mois :`,
-      "• Revente (Vinted/LeBonCoin) → tri garde/vente\n• Petites missions (Montage, Canva, traduction, livraison)\n• Micro-service local (lavage auto, courses, garde animaux)\n• Heures sup'/petits extras le WE",
-      "Règle : 50% épargne, 50% plaisir/dettes."
-    ]);
-  }
-
-  // CAF / APL (général)
+  // CAF / APL
   if (/\b(caf|apl|aide au logement|prime d'activit[ée])\b/.test(lower)){
     return human([
-      "Aides (général) :",
-      "• Vérifie ton éligibilité sur les **simulateurs officiels** (CAF, service-public)\n• Mets à jour tes revenus mensuels\n• Prévois 1–2 mois de délai avant premier versement"
+      "Aides :",
+      "• Vérifie l’éligibilité sur les simulateurs officiels (CAF, service-public)\n• Mets à jour tes revenus mensuels\n• Compte 1–2 mois de délai pour le premier versement"
     ]);
   }
 
-  // Impôts (basique)
+  // Impôts
   if (/(imp[oô]ts|pr[ée]l[èe]vement|taux|d[ée]claration)/.test(lower)){
     return human([
-      "Impôts – bases utiles :",
-      "• Vérifie ton **taux de prélèvement** dans ton espace\n• Si revenus baissent → demande une **mise à jour du taux**\n• Évite la régularisation salée : mensualisation = lissage"
+      "Impôts — check list :",
+      "• Vérifie ton taux de prélèvement\n• Revenu en baisse → demande une mise à jour du taux\n• Mensualisation = lissage, moins de rattrapage"
     ]);
   }
 
   // Chargeback / carte
   if (/(opposition|carte|vol[ée]|perdue|d[ée]bit inconnu|chargeback|contester)/.test(lower)){
     return human([
-      "Paiement suspect / carte :",
-      "• Fais **opposition** immédiate\n• Télécharge l’**attestation de contestation**\n• Suis le dossier, remboursement souvent sous 10–30 jours"
+      "Paiement suspect :",
+      "• Opposition immédiate\n• Dépose l’attestation de contestation\n• Suivi dossier : remboursement souvent sous 10–30 jours"
     ]);
   }
 
-  // Énergie / Inflation petites économies
-  if (/(facture d'?énergie|électricit|edf|eau|gaz|inflation)/.test(lower)){
-    return human([
-      "Baisser la facture :",
-      "• 19–20°C chauffage, coupe en journée\n• Lave-linge 30°C, sèche-linge moins\n• Minuteur/prises avec interrupteur\n• Compare les offres 1 fois/an"
-    ]);
-  }
-
-  // Crypto/Actions (rappel prudent)
+  // Crypto/Actions (rappel)
   if (/(crypto|bitcoin|bourse|actions|etf)/.test(lower)){
     return human([
-      "Investissements (rappel prudent) :",
-      "• Priorité : **fonds d’urgence** + dettes chères\n• Si tu investis : DCA, long terme, montants que tu peux perdre\n• Diversifie, évite l’effet de levier"
+      "Investissements — rappel prudent :",
+      "• Priorité : fonds d’urgence + dettes chères\n• Si tu investis : DCA, long terme, montants que tu peux perdre\n• Diversifie, pas d’effet de levier"
     ]);
   }
 
-  // Revenus pris en compte ?
-  if (/(revenu|salaire|pay[eé]|gains).*(combien|pris|consid[ée]r|pris en compte)/.test(lower)){
-    const planned=incomePlannedFor(d);
-    return planned!=null
-      ? human([`Pour **${monthKey}**, j’utilise ton **revenu saisi** : ${fmt(planned)}.`,`Tu peux l’ajuster via **💶 Revenu**.`])
-      : human([`Je n’ai pas de revenu saisi pour **${monthKey}**.`,`J’estime **${fmt(incomeObs)}** à partir des entrées du mois. Tu peux le définir via **💶 Revenu**.`]);
-  }
-
-  // Fallback bilan + menu d’idées
+  // Fallback bilan
   const spendPct = usableIncome>0 ? Math.round((spend/usableIncome)*100) : 0;
   const b = budget50_30_20(d);
-  const budgetLine = b ? `Repère 50/30/20 : besoins ${fmt(b.needs)} • plaisir ${fmt(b.wants)} • épargne ${fmt(b.save)}.` : `Ajoute ton revenu via **💶 Revenu** pour une reco 50/30/20.`;
+  const budgetLine = b ? `Repère 50/30/20 : besoins ${fmt(b.needs)} • plaisir ${fmt(b.wants)} • épargne ${fmt(b.save)}.` : `Ajoute ton revenu via « 💶 Revenu » pour une reco 50/30/20.`;
   return human([
-    `Bilan **${monthKey}**`,
+    `Bilan ${monthKey}`,
     `• Revenus : ${fmt(usableIncome)}\n• Dépenses : ${fmt(spend)} (${spendPct}% des revenus)\n• Catégorie la plus gourmande : ${top}`,
     budgetLine,
-    "Dis-moi ce que tu veux optimiser :\n• **Courses**, **Sorties**, **Abonnements**, **Dettes**\n• **Frais bancaires**, **Facture en retard**, **Voyage**\n• **Fonds d’urgence**, **Impôts**, **Side income**\nEt je te sors un plan concret en 3–5 points."
+    "Je peux t’aider à optimiser : Courses, Sorties, Abonnements, Dettes, Frais bancaires, Facture en retard, Voyage, Fonds d’urgence, Impôts, Side income."
   ]);
 }
 
@@ -626,27 +606,33 @@ function getActionDock(){
 }
 
 // -----------------------------
-// PERSONA UI (rôle auto, grille responsive)
+// PERSONA UI  (genre → rôle auto, responsive)
+function roleFromGender(g){
+  if(g==="homme") return "Assistant financier";
+  if(g==="neutre") return "Conseiller·ère financier·ère";
+  return "Assistante financière";
+}
 function injectPersonaButtonAndPanel(){
   const dock = getActionDock();
 
   const btn = document.createElement("button");
-  btn.className="btn"; btn.style.marginLeft="4px"; btn.title="Personnaliser l'assistant";
+  btn.className="btn"; btn.style.marginLeft="4px"; btn.title="Personnaliser l'assistant·e";
   btn.textContent="🎨 Personnalise-moi";
   btn.onclick = openPersonaPanel;
   dock.appendChild(btn);
 
-  const modal=document.createElement("div"); modal.id="personaModal"; modal.style.display="none";
-  document.body.appendChild(modal);
-
+  const modal=document.createElement("div"); modal.id="personaModal";
+  Object.assign(modal.style,{position:"fixed", inset:"0", background:"rgba(0,0,0,.55)", backdropFilter:"blur(6px)", display:"none", zIndex:"10000", padding:"max(8vh, calc(env(safe-area-inset-top) + 16px)) 12px 12px"});
   const card=document.createElement("div");
-  card.className="card";
+  card.className="card"; // stylé par CSS global
+  card.style.maxWidth="560px"; card.style.width="min(560px, calc(100vw - 24px))"; card.style.margin="0 auto";
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-weight:700">Personnalise ton coach</div>
       <button id="personaClose" class="btn">Fermer</button>
     </div>
-    <div class="modal-grid">
+
+    <div class="grid2">
       <label>Nom<br><input id="p_name" placeholder="Camille" /></label>
       <label>Genre<br>
         <select id="p_gender">
@@ -655,6 +641,7 @@ function injectPersonaButtonAndPanel(){
           <option value="neutre">Neutre</option>
         </select>
       </label>
+
       <label>Ton<br>
         <select id="p_tone">
           <option value="chaleureux">Chaleureux</option>
@@ -665,47 +652,59 @@ function injectPersonaButtonAndPanel(){
         </select>
       </label>
       <label>Émoji<br><input id="p_emoji" placeholder="💙" /></label>
-      <label>Teinte bulle (0–360)<br><input id="p_hue" type="number" min="0" max="360" /></label>
 
-      <label style="grid-column:1/-1">Avatar (fichier depuis l'appareil)<br>
+      <label>Teinte bulle (0–360)<br><input id="p_hue" type="number" min="0" max="360" /></label>
+      <div></div>
+
+      <label style="grid-column:1/3">Avatar (depuis l'appareil)<br>
         <input id="p_avatar_file" type="file" accept="image/*">
         <div id="p_avatar_preview" style="margin-top:6px; display:flex; align-items:center; gap:8px">
           <div style="width:36px;height:36px;border-radius:999px;border:1px solid #2b3150;background:#0e1423" id="p_avatar_circle"></div>
-          <small style="opacity:.8">Optionnel. L’image reste en local.</small>
+          <span class="small">Optionnel. L’image reste en local.</span>
         </div>
       </label>
 
-      <label style="grid-column:1/-1">Vitesse frappe (ms/char)<br><input id="p_typing" type="number" min="5" max="100" /></label>
+      <label>Vitesse frappe (ms/char)<br><input id="p_typing" type="number" min="5" max="100" /></label>
+      <div></div>
     </div>
+
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
       <button id="personaReset" class="btn">Réinitialiser</button>
       <button id="personaSave" class="btn primary">Enregistrer</button>
     </div>`;
-  modal.appendChild(card);
+  modal.appendChild(card); document.body.appendChild(modal);
 
   $("#personaClose").onclick = ()=> modal.style.display="none";
+  $("#p_gender").addEventListener("change", (e)=>{
+    // met à jour l’aperçu du rôle dans le titre du chat
+    const role = roleFromGender(e.target.value);
+    state.aiPersona.role = role;
+    save(); updatePersonaTitle();
+  });
+
   $("#personaSave").onclick = ()=>{
     const p=state.aiPersona;
     p.name   = $("#p_name").value.trim() || p.name;
     p.gender = $("#p_gender").value;
-    p.role   = roleByGender(p.gender); // rôle auto
-    p.tone   = $("#p_tone").value || p.tone;
+    p.role   = roleFromGender(p.gender);
+    p.tone   = $("#p_tone").value;
     p.emoji  = $("#p_emoji").value || p.emoji;
     p.bubbleHue = Math.max(0, Math.min(360, Number($("#p_hue").value || p.bubbleHue)));
     p.typingSpeedMs = Math.max(5, Number($("#p_typing").value || p.typingSpeedMs));
     save(); updatePersonaTitle(); modal.style.display="none";
     pushPersona("ai","Personnalisation enregistrée ✅");
   };
+
   $("#personaReset").onclick = ()=>{
-    const g="femme";
     state.aiPersona = {
-      enabled:true, name:"Camille", gender:g, role:roleByGender(g),
+      enabled:true, name:"Camille", role:"Assistante financière", gender:"femme",
       tone:"chaleureux", emoji:"💙", avatar:"", bubbleHue:225,
       greeting:"", typingSpeedMs:18
     };
     save(); updatePersonaTitle(); modal.style.display="none"; pushPersona("ai","Persona réinitialisée.");
   };
 
+  // Avatar: preview + Data URL
   const fileInput = card.querySelector("#p_avatar_file");
   fileInput.onchange = ()=>{
     const f = fileInput.files?.[0]; if(!f) return;
@@ -724,7 +723,7 @@ function injectPersonaButtonAndPanel(){
 
   function openPersonaPanel(){
     $("#p_name").value  = state.aiPersona.name || "";
-    $("#p_gender").value= state.aiPersona.gender || "neutre";
+    $("#p_gender").value= state.aiPersona.gender || "femme";
     $("#p_tone").value  = state.aiPersona.tone || "chaleureux";
     $("#p_emoji").value = state.aiPersona.emoji || "";
     $("#p_hue").value   = Number(state.aiPersona.bubbleHue || 225);
@@ -734,8 +733,7 @@ function injectPersonaButtonAndPanel(){
       circle.style.backgroundImage=`url('${state.aiPersona.avatar}')`;
       circle.style.backgroundSize="cover"; circle.style.backgroundPosition="center";
     }else{
-      circle.style.backgroundImage="";
-      circle.style.background="#0e1423";
+      circle.style.backgroundImage=""; circle.style.background="#0e1423";
     }
     modal.style.display="block";
   }
@@ -753,16 +751,17 @@ function injectIncomePanel(){
   dock.appendChild(btn);
 
   const modal=document.createElement("div"); modal.id="incomeModal";
-  Object.assign(modal.style,{position:"fixed", inset:"0", background:"rgba(0,0,0,.55)", backdropFilter:"blur(4px)", display:"none", zIndex:"10000"});
+  Object.assign(modal.style,{position:"fixed", inset:"0", background:"rgba(0,0,0,.55)", backdropFilter:"blur(6px)", display:"none", zIndex:"10000", padding:"max(10vh, calc(env(safe-area-inset-top) + 16px)) 12px 12px"});
   const card=document.createElement("div");
-  Object.assign(card.style,{maxWidth:"520px", width:"min(520px, calc(100vw - 24px))", margin:"10vh auto", background:"rgba(15,19,32,.95)", border:"1px solid #1d2334", borderRadius:"16px", padding:"16px"});
+  card.className="card";
+  card.style.maxWidth="520px"; card.style.width="min(520px, calc(100vw - 24px))"; card.style.margin="0 auto";
   const now=new Date();
   card.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <div style="font-weight:700">Revenu du mois</div>
       <button id="incomeClose" class="btn">Fermer</button>
     </div>
-    <div class="modal-grid">
+    <div class="grid2">
       <label>Mois<br><input id="inc_month" type="month" value="${now.getFullYear()}-${pad(now.getMonth()+1)}"></label>
       <label>Montant (€)<br><input id="inc_value" type="number" inputmode="decimal" step="0.01" placeholder="1700"></label>
     </div>
@@ -797,7 +796,6 @@ function injectIncomePanel(){
 // -----------------------------
 // Mobile feedback + reveals + barber-pole
 function enhanceMobileUX(){
-  // ripple
   const addRipple = (el) => {
     if(!el) return;
     el.addEventListener("touchstart", (e)=>{
@@ -813,7 +811,6 @@ function enhanceMobileUX(){
   };
   document.querySelectorAll(".btn,.pill,.card,.list li,.kpi .box").forEach(addRipple);
 
-  // bump sur la balance
   const bal = document.getElementById("balanceView");
   if (bal){
     bal.addEventListener("touchstart", ()=>{
@@ -822,7 +819,6 @@ function enhanceMobileUX(){
     }, {passive:true});
   }
 
-  // reveals au scroll
   const io = new IntersectionObserver((ents)=>{
     ents.forEach(ent=>{
       if(ent.isIntersecting){
@@ -846,3 +842,4 @@ function setThinking(on){
 
 // -----------------------------
 document.addEventListener("DOMContentLoaded", init);
+</script>
